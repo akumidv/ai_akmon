@@ -27,8 +27,7 @@ automatically. They are **constraints**, the floor: pipelines say *how* to work,
   do not `sudo`, `chown`, `chmod` the way past it, or otherwise reach for elevated access.
 - **Never write the `env` of a harness settings file** — the launcher sets the run's actor there.
 
-Runtime check: privilege.no-escalation — the whole rule: a Bash command containing `sudo`, and a write
-to a harness settings file's `env`, are denied.
+Runtime check: privilege.no-escalation — whole; detail in [hooks/README.md](../hooks/README.md).
 
 ## Commits & ownership
 
@@ -43,31 +42,24 @@ to a harness settings file's `env`, are denied.
   in its own worktree, `.worktrees/<id>-<name>.<n>/`, on the local branch
   `_aitna/<id>-<name>.<n>`. Inside that worktree the agent commits its own work on that branch
   without asking. It never pushes or tags — but an `autonomous` run (no developer) pushes its own
-  branch and opens a pull request into the default branch. Carrying the branch's work into the branch the owner is on is
+  branch and opens a pull request into the default branch, never committing to it or to `develop`.
+  Carrying the branch's work into the branch the owner is on is
   started by the owner only. When the job is ready the agent commits it there and prints the squash
   — `git merge --squash <branch>` in the owner's checkout, then a commit with its proposed message —
-  which the owner runs or asks the agent to run.
+  which the owner runs or asks the agent to run. The agent confirms a carry by code (`park worktrees
+  <branch>` reads it by content) when the owner says it is done, never from the owner's words or the log.
   After the carry the agent prints the worktree's removal (`git worktree remove <path>`, which
   git refuses while anything is uncommitted); the branch stays as a backup and the agent deletes it
   later — at a periodic check, on request, or when the task closes — only after the code check that
-  every path the branch changed holds the same content in the owner's branch. A commit once made
+  every path the branch changed holds the same content in the owner's branch and no lease is live. A commit once made
   stays as made: the agent does not rewrite it (amend, rebase, reset to an earlier commit) to ease
   the carry unless the owner says so, and brings the owner's branch in by merge. The carve-out covers
   no other branch — the agent moves, renames or deletes no ref but its own `_aitna/` job branches —
   no other commit and no other push.
 
-Runtime check: commits.owner-owned — subset, read from the access matrix by actor (`AKMON_ACTOR`;
-unset is `developer`): an AI `Co-Authored-By` trailer is denied; for a developer `push`, `tag`,
-`gh`/`glab` pull-request, merge and release commands ask everywhere, and `commit`, `merge`, `rebase`,
-`reset` and the other history writes pass inside a linked worktree on its own named branch (not
-`main`/`master`) and ask anywhere else; an `autonomous` run's history writes, `push` of its own
-branch and a pull request into the default branch pass; on it or `develop` they are denied. Ref writes (`branch -D`,
-`checkout -B`, `update-ref`, `worktree remove` and the like) ask unless every target ref is an
-`_aitna/` job branch. Only command words are read, never
-heredoc or quoted text, and the repository checked is the one the command acts on (`cd`, `-C`), not the session's.
-An ask is shown when the run is attended and becomes a deny when it is not (the host states
-attendance, else the interactive `default` permission mode attends). "Tests pass before a commit is
-offered" and "branch for non-trivial work" are not machine-checked.
+Runtime check: commits.owner-owned — subset, by actor; detail in [hooks/README.md](../hooks/README.md) and
+[access_matrix.json](../common/access_matrix.json). "Tests pass before a commit is offered" and "branch for
+non-trivial work" are not machine-checked.
 
 ## Verify against reality, not memory
 
@@ -79,8 +71,6 @@ offered" and "branch for non-trivial work" are not machine-checked.
   unchanged design again. Passing tests and plausibility are necessary, not sufficient.
 - **Knowledge no source gives is gathered with the user; a math question to the owner first gathers
   how the industry does it** ([knowledge-lookup](../pipelines/knowledge-lookup.md)).
-- **Requests to the owner** — codes, the closing `Needed from you` block, the owner's answers — follow
-  [collaboration](../rules/collaboration.md), loaded at session start.
 
 ## Analysis before mutation
 
@@ -97,8 +87,8 @@ Applies to every role and every agent.
 - A rule saying **where** something is recorded applies only **after** the decision to record
   it — never a license to write during analysis.
 
-Runtime check: analysis.before-mutation — subset: the first edit to a planning/design doc in a
-session raises a reminder; whether the turn is analysis-only is not decidable by a hook.
+Runtime check: analysis.before-mutation — subset (the first planning/design doc edit of a session
+raises a reminder; whether the turn is analysis-only is not decidable by a hook); detail in [hooks/README.md](../hooks/README.md).
 
 ## Role declaration
 
@@ -106,8 +96,8 @@ session raises a reminder; whether the turn is analysis-only is not decidable by
   Format: `🧭 role: <name> — <focus>`; pick the role by operation ([roles/](../roles/README.md)).
   `🧭 agent: <name> — <focus>` is still read as an alias for one release; write `role:`.
 
-Runtime check: role.declaration — subset: the first edit to a code file in a session raises the
-design→code reminder; the switch itself is not observable, so the restatement is not checked.
+Runtime check: role.declaration — subset (the first code-file edit of a session raises the design→code
+reminder; the switch itself is not observable, so the restatement is not checked); detail in [hooks/README.md](../hooks/README.md).
 
 ## Documentation hygiene
 
@@ -123,12 +113,6 @@ design→code reminder; the switch itself is not observable, so the restatement 
   with a banner; decisions become ADRs; git history is the changelog.
 - **Keep the entry point single.** `AGENTS.md` is the source of truth; vendor files
   (`CLAUDE.md`, `.github/copilot-instructions.md`, …) stay thin pointers.
-
-## Reuse over re-implementation
-
-- Use existing project code, akmon `tools/`, and shared skills before writing new code.
-- Put repeatable mechanics into a **tool**, not an ad-hoc script.
-- Match the surrounding code's conventions (naming, idiom, comment density).
 
 ## Scope discipline
 
@@ -155,56 +139,4 @@ Not machine-checked; how to carry it beyond prose is open task A52.
   rung only on failure signals (gates red twice, the delegate flags uncertainty, a
   contested fork emerges mid-task).
 
-Runtime check: delegation.tier-floor — subset: uninterrupted read/shell/edit volume with no
-delegation raises a nudge, then an ask when the run is attended; an unattended run (the host
-states it, else any mode but the interactive `default`) escalates that ask to a deny.
-
-## Code design — the principles every language inherits
-
-Drawn from the Google Python Style Guide and read for any language; a language's
-[profile](../profiles/) says how each reads there, and its checker enforces the mechanical half.
-
-- **A rule a program can check lives in the checker, not in prose.** Prose holds only what no
-  checker can see; where a checker enforces a rule, a document names the rule and never
-  restates it.
-- **Data or behaviour, never half of each.** A value type holds data and no hidden behaviour; a
-  behaviour type owns its state. Validation models sit on the boundaries, where data enters.
-- **A contract carries a typed object**, not a string-keyed map or a bare string.
-- **Return a value or change state — not both — and let the name say which** (`sorted` vs
-  `sort`).
-- **Failure is raised, never returned.** No `None`, `-1` or `False` as a failure signal. Catch
-  only where you can act, keep the protected region to what can fail, and keep the cause.
-- **Configuration is read at the entry point and passed down;** nothing deep in the logic reads
-  the environment or a file of its own accord.
-- **No mutable global state.** A module-level value is a constant.
-- **Plain code over power features:** no metaprogramming, reflection-driven dispatch, dynamic
-  inheritance, import tricks or finalizers where ordinary code does the job.
-- **Concurrency stays at the edges.** Never rely on a built-in being atomic; hand data between
-  threads through a queue.
-- **A resource is released by a scope** (a context manager, RAII, `defer`), never by hope.
-- **Small, focused functions.** A function that has grown past a screen is split, or says why
-  it is not; the language's checked rules set the number.
-- **Names say what a thing is**, without abbreviations and without its type.
-- **The public surface is documented; comments say why, not what.** An error message states the
-  condition that failed and names the value.
-- **A TODO carries a tracker link:** `TODO: <link> - <what>`.
-- **Be consistent with the surrounding code** (§ Reuse over re-implementation).
-
-## API shape — subject first, then how
-
-- **Every callable reads as `f(subject, *rest)`:** the **first parameter is the data it acts on**
-  (the *subject* — a frame/object, or a location/handle); parameters **after** it either say
-  *what to do* (modifiers/options) or supply *additional data*. So a reader knows *what a call
-  operates on* from position alone — applies to **design and code** (architect shapes it,
-  engineer writes it).
-- **By shape:** *transform* → data first · *method* → subject is `self`, an explicit data param
-  comes first after `self` · *reader/loader* → the **location/handle** is the subject (location
-  first) · *writer/persister* → the **data** is the subject (data first; destination is a
-  modifier) · *factory* (build-from-spec) → **selector first**, exempt.
-- A project may pin the specifics and exemptions as a requirement; this is the floor.
-
-## Don't duplicate what the code already states
-
-- Don't hand-maintain metadata that re-states a callable's own **signature or types** (its
-  params, input/return kinds, schema): **derive it from the single source**. A parallel
-  declaration drifts from the code. Declare only what the signature/type *cannot* express.
+Runtime check: delegation.tier-floor — subset; detail in [hooks/README.md](../hooks/README.md) (delegation-nudge).

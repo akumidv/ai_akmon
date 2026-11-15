@@ -291,14 +291,22 @@ def _tail(policy_id: str) -> str:
     return next(marker.tail for marker in markers if marker.policy_id == policy_id)
 
 
-def test_marker_tails_state_the_subset_each_callable_actually_covers():
-    assert "the whole rule" in _tail("privilege.no-escalation")
+def test_marker_tails_say_whole_or_subset_and_name_where_the_detail_lives():
+    # The detail of what each hook enforces is in hooks/README.md (and the access matrix), not in the guardrail.
+    assert _tail("privilege.no-escalation").startswith("— whole;")
     commits = _tail("commits.owner-owned")
-    assert "linked worktree" in commits
-    assert "read from the access matrix by actor" in commits
-    assert "Co-Authored-By" in commits
+    assert "subset" in commits
+    assert "hooks/README.md" in commits
+    assert "access_matrix.json" in commits
     assert "not machine-checked" in commits
     assert "not decidable by a hook" in _tail("analysis.before-mutation")
-    delegation = _tail("delegation.tier-floor")
-    assert "escalates that ask to a deny" in delegation
-    assert "first edit to a code file" in _tail("role.declaration")
+    assert "subset" in _tail("delegation.tier-floor")
+    assert "not observable" in _tail("role.declaration")
+    for policy_id in (
+        "privilege.no-escalation",
+        "commits.owner-owned",
+        "analysis.before-mutation",
+        "delegation.tier-floor",
+        "role.declaration",
+    ):
+        assert "hooks/README.md" in _tail(policy_id)

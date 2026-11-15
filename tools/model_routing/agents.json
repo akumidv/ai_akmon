@@ -122,7 +122,7 @@
   ],
   "status_lines": {
     "binding": "[akmon] model routing: vendor={{vendor}} · orchestrator={{orchestrator}} · reasoner={{reasoner}} · auditor={{auditor}} · worker={{worker}} · mid={{mid}} · {{second_opinion}}",
-    "delegation": "Delegation is the default — route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals{{escalation_hint}}. {{zone_convention}}",
+    "delegation": "Route by task kind (MODEL.md § Capability tiers): k_explorer/k_mechanic/k_validator (worker) · k_implementer (mid) · k_reasoner · k_auditor (audit at gates); escalate one rung only on failure signals{{escalation_hint}}. {{zone_convention}}",
     "self_check": "Self-check: if your actual model is not '{{orchestrator}}', re-run `{{init_command}} --orchestrator <alias>`."
   },
   "init_instruction": [

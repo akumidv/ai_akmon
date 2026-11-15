@@ -112,6 +112,7 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "guardrails/_common.md",
         "rules/collaboration.md",
         "rules/templates.md",
+        "rules/code.md",
         "pipelines/pre-commit.md",
         "pipelines/code-flow.md",
         "pipelines/design-flow.md",
@@ -351,6 +352,7 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[st
         "_aitna/.akmon/guardrails/_common.md",
         "_aitna/.akmon/profiles/python.md",
         "_aitna/.akmon/profiles/ruff.toml",
+        "_aitna/.akmon/rules/code.md",
         "_aitna/.akmon/rules/collaboration.md",
         "_aitna/.akmon/rules/templates.md",
     ]:
@@ -595,6 +597,7 @@ def _installed_npm_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[str,
     if materialized != [
         "_aitna/.akmon/guardrails/_common.md",
         "_aitna/.akmon/profiles/js.md",
+        "_aitna/.akmon/rules/code.md",
         "_aitna/.akmon/rules/collaboration.md",
         "_aitna/.akmon/rules/templates.md",
     ]:

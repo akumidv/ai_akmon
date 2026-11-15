@@ -312,6 +312,7 @@ SNAPSHOT_FILES = (
     "guardrails/_common.md",
     "rules/collaboration.md",
     "rules/templates.md",
+    "rules/code.md",
     "pipelines/pre-commit.md",
     "pipelines/code-flow.md",
     "pipelines/design-flow.md",

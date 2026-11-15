@@ -39,12 +39,10 @@ which hold the prohibitions; the shapes these rules use are in [templates](templ
   block** and nothing after it, grouped under `Decide` — decisions — and `Act` — actions: a go-ahead
   to write, a commit, a push, a release, a run, something to supply. It says when nothing is needed.
 - **Each request is one numbered item that decides correctly when read alone**, in short plain
-  sentences, in the [item shape](templates.md#owner-request-item): its code and gist; `Σ` — the sum of
-  the question, one to three sentences on a concrete case; `Options`, each with its cost and its weak
-  spot, the recommended one above all, a weighed and rejected one kept with `rejected` and its reason;
-  `Recommendation` with its reason in one or two sentences, or the main reason marked
-  `(short — full reasoning above under D-…)`, never a reason cut short unmarked; `After` when order
-  matters. An action takes the short form: its code, its gist and one sentence of what is needed.
+  sentences, in the [item shape](templates.md#owner-request-item). Each option carries its cost and
+  its weak spot, the recommended one above all; a weighed and rejected one is kept with `rejected` and
+  its reason; a reason is never cut short unmarked — a main reason given short is marked
+  `(short — full reasoning above under D-…)`.
 - **The body argues a question only when needed:** its reasoning does not fit the item, or it is asked
   again in a later message than the first. Such a passage is headed by the question's code and gist,
   and the item sums it up rather than copying it. Otherwise a question stands in the block alone.

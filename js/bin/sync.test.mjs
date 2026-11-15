@@ -1172,7 +1172,7 @@ test("an import under a relocated dev layer matches exactly its own prefix", () 
     put(root, "AGENTS.md", "@a.b+c/.akmon/profiles/python.md\n@aXb+c/.akmon/profiles/quant.md\n");
     put(root, ".aitna-root", "a.b+c\n");
     assert.deepEqual(importedStandardFiles(data, root), [
-      ["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"],
+      ["guardrails/_common.md", "profiles/python.md", "rules/code.md", "rules/collaboration.md", "rules/templates.md"],
       [],
     ]);
   });
@@ -1193,7 +1193,7 @@ test("the scan reads text the way Python does: CRLF, lone CR and U+2028 are not 
       const [found, errors] = importedStandardFiles(data, root);
       assert.deepEqual(
         found,
-        ["guardrails/_common.md", ...names, "rules/collaboration.md", "rules/templates.md"],
+        ["guardrails/_common.md", ...names, "rules/code.md", "rules/collaboration.md", "rules/templates.md"],
         JSON.stringify(text),
       );
       assert.deepEqual(errors, []);
@@ -1454,6 +1454,7 @@ test("importsRegion is the markers around one import per always-imported file, a
     "@_aitna/akmon/guardrails/_common.md",
     "@_aitna/akmon/rules/collaboration.md",
     "@_aitna/akmon/rules/templates.md",
+    "@_aitna/akmon/rules/code.md",
     CLOSE,
   ]);
   withScratch((scratch) => {

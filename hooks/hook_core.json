@@ -78,7 +78,7 @@
     "no_agent_line": "No role is declared yet.",
     "pick_by_operation": "Pick the role (never an agent name) by operation: decompose an existing thing → review · construct a new structure/decision → architect · realize a decided structure in code → engineer. If unclear, ask.",
     "pick_generic": "Pick the role the task calls for, one of the roles listed above, never an agent name; if unclear, ask.",
-    "delegation_line": "Delegation is the default for non-atomic work: before the first repository sweep, edit, or test run, decompose the task and delegate every independent sub-step to available subagents. Keep only decomposition, routing, synthesis, and owner dialogue in the orchestrator. Skip delegation only when the task is atomic or the harness exposes no subagents; state the reason. The work style sets the rest: delegating also hands whole athla and higher-tier calls to delegates; controlling leaves stages to sessions the developer starts and, where a reasoner, auditor or athlos implementer would be called, recommends which, for what and why. Controlling: a delegate's brief is in the developer's language.",
+    "delegation_line": "Delegation is the default for non-atomic work: before the first repository sweep, edit, or test run, decompose the task and delegate every independent mechanical sub-step to available subagents, keeping decomposition, routing, synthesis and owner dialogue, and skipping only when the task is atomic or the harness exposes no subagents; the work style (next line) sets whether whole athla and higher-tier calls are delegated too.",
     "work_style_line": "work style: {{style}} ({{source}})",
     "work_style_sources": {
       "session": "set in this session with /style",

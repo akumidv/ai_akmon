@@ -203,6 +203,16 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   `learning/` charters by re-running `akmon init`.
 
 ### Changed
+- **The session-start context is trimmed and de-duplicated, and the code rules have their own file (A49).**
+  Consumer-visible: `rules/code.md` — reuse, code design, API shape and don't-duplicate, moved verbatim
+  out of `guardrails/_common.md` — is the fourth file of the managed imports region, so `akmon sync`
+  adds one `@.../rules/code.md` line and materializes the file in package mode; the shipped
+  `profiles/python.md` and `profiles/js.md` now say "the code rules" where they said "the common
+  guardrail's § Code design". Every `Runtime check:` paragraph of the guardrail is one line pointing at
+  `hooks/README.md`; the delegation rule in the generated AGENTS block, the session-start hook line and the
+  model-routing line is said once each, the work-style clause intact; the generated `CLAUDE.md` no longer
+  claims AGENTS.md carries a "read memory at session start" rule. No rule was dropped. Check: run
+  `akmon sync` and commit the new import line and the refreshed `CLAUDE.md`.
 - **The dev-layer root is declared by a `.aitna-root` file, and the `AITNA_ROOT` environment
   variable is removed (C157,
   [ADR-0022](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0022-local-layer-index-and-plans.md)/D09).**

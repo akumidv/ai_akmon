@@ -371,7 +371,7 @@ def _region(base: str) -> str:
     """The akmon block's managed imports region as a fresh block writes it, for ``base``."""
     return (
         f"<!-- akmon:imports -->\n@{base}/guardrails/_common.md\n@{base}/rules/collaboration.md\n"
-        f"@{base}/rules/templates.md\n<!-- /akmon:imports -->\n"
+        f"@{base}/rules/templates.md\n@{base}/rules/code.md\n<!-- /akmon:imports -->\n"
     )
 
 
@@ -705,6 +705,7 @@ def test_package_attach_verifies_strict_green(tmp_path, monkeypatch):
         "_aitna/.akmon/guardrails/_common.md",
         "_aitna/.akmon/profiles/python.md",
         "_aitna/.akmon/profiles/ruff.toml",
+        "_aitna/.akmon/rules/code.md",
         "_aitna/.akmon/rules/collaboration.md",
         "_aitna/.akmon/rules/templates.md",
     ]

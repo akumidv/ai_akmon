@@ -56,7 +56,7 @@ test("the readers answer what the data file carries", () => {
   assert.equal(blockHeading(data), "## Dev layer — akmon");
   assert.equal(shipped(data), "akmon-shipped");
   assert.equal(consumer(data), "consumer-total");
-  assert.deepEqual(caps(data), { "akmon-shipped": new Cap(472, 30000), "consumer-total": new Cap(722, 43000) });
+  assert.deepEqual(caps(data), { "akmon-shipped": new Cap(460, 28800), "consumer-total": new Cap(710, 41800) });
   assert.deepEqual(severity(data), { "akmon-shipped": "error", "consumer-total": "warn" });
 });
 

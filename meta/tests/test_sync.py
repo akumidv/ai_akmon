@@ -871,7 +871,12 @@ def test_sync_data_pins_its_structure():
         "---\n# {{banner}}\n{{frontmatter}}\n---\n\n# {{name}}\n\n{{body}}"
     )
     assert _SYNC_DATA["skill_stub_dirs"] == [".claude/skills", ".agents/skills"]
-    assert _SYNC_DATA["always_imported"] == ["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"]
+    assert _SYNC_DATA["always_imported"] == [
+        "guardrails/_common.md",
+        "rules/collaboration.md",
+        "rules/templates.md",
+        "rules/code.md",
+    ]
     assert _SYNC_DATA["imports_region"] == {"open": "<!-- akmon:imports -->", "close": "<!-- /akmon:imports -->"}
     assert _SYNC_DATA["moved_imports"] == {"guardrails/python.md": "profiles/python.md"}
     assert _SYNC_DATA["ruff_configs"][0] == ["pyproject.toml", ["tool", "ruff"]]
@@ -1082,6 +1087,7 @@ def test_imports_region_is_the_markers_around_one_import_per_always_imported_fil
         "@_aitna/akmon/guardrails/_common.md",
         "@_aitna/akmon/rules/collaboration.md",
         "@_aitna/akmon/rules/templates.md",
+        "@_aitna/akmon/rules/code.md",
         _REGION_CLOSE,
     ]
     assert sync.imports_region("tools/ai/.akmon")[1] == "@tools/ai/.akmon/guardrails/_common.md"

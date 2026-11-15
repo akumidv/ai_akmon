@@ -11,6 +11,7 @@ this file carries only what is true of akmon and of nothing else.
 @guardrails/_common.md
 @rules/collaboration.md
 @rules/templates.md
+@rules/code.md
 <!-- /akmon:imports -->
 @profiles/python.md
 @profiles/js.md
@@ -25,16 +26,16 @@ is the guardrail's rule; this file only says where the roles live.
 
 ## Delegation
 
-**Delegation is the default.** For every non-trivial task, before the first repository sweep,
+**Delegation is the default:** for every non-trivial task, before the first repository sweep,
 edit, or test run, decompose the work and delegate every independent mechanical sub-step to
-available subagents without waiting for an owner prompt. The orchestrator retains decomposition,
-routing, synthesis, and owner dialogue. Skip only when the task is atomic or the harness exposes
-no subagents; state the reason. **The work style** sets the rest
+available subagents without waiting for an owner prompt, keeping only decomposition, routing,
+synthesis and owner dialogue; skip only when the task is atomic or the harness exposes no subagents,
+and state the reason. **The work style** sets the rest
 ([ADR 0031/D06](docs/adr/0031-work-styles-delegating-and-controlling.md#d06--the-delegation-rule-reads-the-style)):
-*delegating* also hands whole athla and higher-tier calls to delegates; *controlling* leaves
-stages to sessions the developer starts, and where a reasoner, auditor or athlos implementer would
-be called it recommends which, for what and why. Controlling: a delegate's brief is in the developer's language.
-This clause is direct, not imported: Codex does not expand nested `@` imports.
+*delegating* also hands whole athla and higher-tier calls to delegates; *controlling* leaves stages to
+sessions the developer starts and recommends which higher-tier call, for what and why, with a
+delegate's brief in the developer's language. This clause is direct, not imported: Codex does not
+expand nested `@` imports.
 
 ## akmon runs on itself
 
@@ -82,29 +83,11 @@ the format of a note or a plan line and its place stay with the code.
 - Harness and vendor facts that took an experiment — not what vendor docs state plainly — live in
   `meta/MEASUREMENTS.md` with the version they were verified on. Grep it before a probe, cite a
   row that covers the version in use, and add a row after a new probe, replay or source reading.
-- **Commits — the one place akmon is narrower than the guardrail it ships.** The owner owns
-  merges into the default branch, tags, pushes, publishing, and consumer pin bumps. **The main
-  checkout is the owner's:** an agent changes no history there, on any branch. An agent commits
-  only inside a worktree — its own or the one the harness made for its athlos — on that worktree's
-  branch, and may bring other branches into it, never carry it out; carrying a worktree's branch
-  into the branch the owner is on is started by the owner only. **When the work in a worktree is ready
-  the agent commits it there, on the branch, and prints the carry as commands, always a squash:**
-  `cd <the owner's checkout>`, `git merge --squash <branch>`, then `git commit -m "<message>"` with the
-  message the agent proposes, so every commit of the worktree becomes one commit on the owner's
-  branch. The owner runs them, or asks the agent to. **The agent confirms a carry by code** —
-  `park worktrees <branch>` reads it by content — when the owner says it is done, never from the
-  owner's words or the log. **Removal takes two steps.** After the verified carry the agent prints `git worktree remove <path>` (git refuses while anything in the worktree is
-  uncommitted, and the commits stay in the branch); a worktree gone with its branch kept says the work
-  is finished and the branch is only a backup. The agent deletes the branch later — at a periodic
-  check, on request, or when its task closes — only after the code check that the work is carried by
-  content: every path the branch changed holds the same content in the owner's branch (a squash leaves
-  the branch unmerged in git's eyes, so `--merged` cannot say it) and no lease is live
-  ([ADR 0029/D09](docs/adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree);
-  the guard and the shipped carve-out follow in C190). An `autonomous` run, with no developer,
-  also pushes its own branch and opens a pull request into the default branch, never committing
-  to it or to `develop`
-  ([ADR 0031/D07](docs/adr/0031-work-styles-delegating-and-controlling.md#d07--access-is-a-matrix-of-actor-action-and-place)).
-  Everything else in § Commits & ownership stands as written.
+- **Commits** follow the guardrail § Commits & ownership, narrowed in one place: the owner owns
+  merges into the default branch, tags, pushes, publishing and consumer pin bumps, and **the main
+  checkout is the owner's** — an agent changes no history there, on any branch, even when asked to
+  commit; it commits only inside a worktree, its own or the one the harness made for its athlos
+  ([ADR 0029/D09](docs/adr/0029-ergon-athlos-step-one-method-of-work.md#d09--an-agent-commits-only-inside-a-worktree)).
 - **No dates, and never a date as an index.** Git history is the timeline. This applies to the
   text and file names of every tracked document: `meta/` (tasks, ADRs, designs, reviews,
   evidence) and the shipped prose. Name a file by its task id and a short subject

@@ -196,7 +196,7 @@ the portability check — is the helper's code, in Python and its JavaScript twi
 tests and its park scenarios as the contract. An ADR block states what is decided and why; a design
 section holds a mechanism only until it is built, then points at the code; the shipped skills and
 guides name the command and never restate its steps. A rule a program can check is checked by it
-(the common guardrail's code-design principle), so a step that exists only as a sentence is a gap
+(the code-design principle in [`rules/code.md`](../../rules/code.md)), so a step that exists only as a sentence is a gap
 to close, not a rule to follow.
 
 ### D09 — An agent commits only inside a worktree

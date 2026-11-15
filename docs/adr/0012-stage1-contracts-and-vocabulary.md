@@ -402,6 +402,22 @@ Each scope must satisfy both inclusive dimensions. Decimal bytes are normative: 
 >
 > The consumer pair keeps its construction: the shipped pair plus 250 lines / 13,000 bytes.
 
+> **Amendment — D-A49-TRIM, owner-approved: the caps are lowered after the trim.** The code rules
+> moved from the guardrail to `rules/code.md`, which stays loaded at session start
+> ([ADR 0014](0014-code-rules-catalog-and-language-profiles.md) amendment); the guardrail's runtime
+> check paragraphs became one line each, and the delegation, commit and profile-preamble
+> repetitions were removed with no rule dropped. The shipped chain measures 456 lines and 28,523
+> bytes (it was 468 and 29,760 before). The caps keep the headroom of the previous amendment over
+> the measure — 4 lines and about 280 bytes, rounded to a hundred — so the ratchet moves down with
+> the shape instead of standing as permission for the old one.
+>
+> | scope | inclusive cap | checker and result |
+> |---|---|---|
+> | akmon-shipped | `≤460 lines` and `≤28,800 bytes` | `self_ci`: error |
+> | consumer total | `≤710 lines` and `≤41,800 bytes` | `verify.py`: warn; exit 1 under `--strict` only |
+>
+> The consumer pair keeps its construction: the shipped pair plus 250 lines / 13,000 bytes.
+
 Both checks emit the exact stable code `caps.always-loaded`. Their target distinguishes the scope,
 and the diagnostic reports that scope's measured line and byte counts beside both caps. Enforcement
 and rendering use the same counters; stale or hard-coded output is a contract failure.

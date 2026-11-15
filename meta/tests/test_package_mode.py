@@ -154,6 +154,7 @@ def test_materialization_ships_only_the_guardrails_agents_md_imports(tmp_path):
     assert paths == {
         "_aitna/.akmon/guardrails/_common.md",
         "_aitna/.akmon/profiles/python.md",
+        "_aitna/.akmon/rules/code.md",
         "_aitna/.akmon/rules/collaboration.md",
         "_aitna/.akmon/rules/templates.md",
     }
@@ -189,7 +190,7 @@ Add a language guardrail, for example `@_aitna/.akmon/guardrails/python.md`.
 """
     root = _make_package_root(tmp_path, agents_md=agents_md)
     names, errors = sync.imported_standard_files(root)
-    assert names == ["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"]
+    assert names == ["guardrails/_common.md", "rules/code.md", "rules/collaboration.md", "rules/templates.md"]
     assert errors == []
 
 
@@ -199,7 +200,7 @@ def test_the_always_imported_files_are_materialized_even_when_agents_md_imports_
     the rule files beside it travel with it."""
     root = _make_package_root(tmp_path, agents_md="# AGENTS\n")
     names, errors = sync.imported_standard_files(root)
-    assert names == ["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"]
+    assert names == ["guardrails/_common.md", "rules/code.md", "rules/collaboration.md", "rules/templates.md"]
     assert errors == []
 
 

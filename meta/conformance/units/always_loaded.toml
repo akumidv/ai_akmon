@@ -81,7 +81,7 @@ expected_json = '"consumer-total"'
 id = "vocab/caps"
 fn = "caps"
 args_json = '[]'
-expected_json = '{"akmon-shipped": {"lines": 472, "bytes": 30000}, "consumer-total": {"lines": 722, "bytes": 43000}}'
+expected_json = '{"akmon-shipped": {"lines": 460, "bytes": 28800}, "consumer-total": {"lines": 710, "bytes": 41800}}'
 
 [[case]]
 id = "vocab/severity"

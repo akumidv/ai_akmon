@@ -3,16 +3,14 @@
 The **language** profile for JavaScript and TypeScript — `akmon init` imports it from `AGENTS.md`
 for a project with a `package.json` or a declared JavaScript or TypeScript language, so it loads
 at session start. It layers on the
-[common guardrails](../guardrails/_common.md): their § Code design states the principles for any
-language; this file says how they read in JavaScript, and only what no checker can see.
+[common guardrails](../guardrails/_common.md) and the [code rules](../rules/code.md), which state the
+principles for any language; this file says how they read in JavaScript, and only what no checker
+can see.
 
-> **Checked rules are not repeated here.** akmon's JavaScript/TypeScript rules are a standard
-> oxlint configuration, [`oxlint.json`](oxlint.json) — ESLint's `recommended` bug class plus the
-> Google JavaScript Style Guide's checkable rules, each annotated with its section — that runs with
-> or without akmon. **The project's own rules win:** a project with its own linter configuration
-> keeps it, and `akmon check` runs whatever the project declares under `[check]` in
-> `<dev root>/.akmon.toml`. Where the project's configuration switches a rule off or decides
-> otherwise, follow the project, not this file.
+> **Checked rules live in the linter configuration, [`oxlint.json`](oxlint.json)** (ESLint's
+> `recommended` bug class plus the Google JavaScript Style Guide's checkable rules, each annotated
+> with its section), not here. **The project's own rules win:** where its configuration switches a
+> rule off or decides otherwise, follow the project, not this file.
 
 ## Toolchain — the project's own
 

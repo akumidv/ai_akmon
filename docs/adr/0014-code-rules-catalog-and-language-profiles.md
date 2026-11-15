@@ -78,6 +78,20 @@ a standard ruff configuration that runs without akmon too.
   findings; uv or any package manager as a consumer requirement; the size family in the same
   change; Google's 80 or 100 for akmon.
 
+## Amendment — the code principles move to `rules/code.md`, still loaded at session start (A49)
+
+Decisions 1 and 2 place the language-agnostic code principles in `guardrails/_common.md` § Code
+design. Owner direction, given in session under task A49: they move, verbatim, with the rest of the
+code rules — § Reuse over re-implementation, § Code design, § API shape and § Don't duplicate what
+the code already states — to [`rules/code.md`](../../rules/code.md), so the guardrail keeps only
+prohibitions and process floors and each rule keeps one owner. The placement rule of Decision 1
+reads `rules/code.md` § Code design where it says `_common.md` § Code design. The file stays in
+`always_imported` (`bin/sync.json`): code is developed in every session, so it loads at session
+start in akmon and in every consumer, and a language profile layers on it as it did on the
+guardrail. Deferring the code rules to on-demand loading is rejected for now: it saves context only
+if sessions exist that never need them, and otherwise only delays the load; a measurement of
+sessions decides (A49).
+
 ## Addressable accepted decision blocks
 
 ### D02 — `init` writes the language-profile import; `verify` warns on a missing or unresolved one

@@ -3,12 +3,12 @@
   "scopes": ["akmon-shipped", "consumer-total"],
   "caps": {
     "akmon-shipped": {
-      "lines": 472,
-      "bytes": 30000
+      "lines": 460,
+      "bytes": 28800
     },
     "consumer-total": {
-      "lines": 722,
-      "bytes": 43000
+      "lines": 710,
+      "bytes": 41800
     }
   },
   "severity": {

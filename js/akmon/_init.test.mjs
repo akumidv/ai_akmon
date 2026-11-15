@@ -1343,7 +1343,7 @@ test("the detected profiles follow the flags and the manifests, python first, no
 function region(base) {
   return (
     `<!-- akmon:imports -->\n@${base}/guardrails/_common.md\n@${base}/rules/collaboration.md\n` +
-    `@${base}/rules/templates.md\n<!-- /akmon:imports -->\n`
+    `@${base}/rules/templates.md\n@${base}/rules/code.md\n<!-- /akmon:imports -->\n`
   );
 }
 

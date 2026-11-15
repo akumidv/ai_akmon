@@ -42,7 +42,7 @@ Applied to each rule, in order:
 
 1. **Can a standard linter decide it from the source, with few false positives?** → **checked**:
    in the linter's configuration. Prose may cite the linter's code; it does not restate the rule.
-2. **Does it hold in any language?** → a **principle** in `_common.md` § Code design.
+2. **Does it hold in any language?** → a **principle** in `rules/code.md` § Code design.
 3. Otherwise → the **profile** of the language or environment it belongs to — including every
    Google rule no linter covers, which is then a review point.
 
@@ -69,7 +69,8 @@ language.
 **Layout:**
 
 ```
-guardrails/_common.md          the floor + § Code design (language-agnostic principles)
+guardrails/_common.md          the floor
+rules/code.md                  § Code design (language-agnostic principles)
 profiles/python.md             language profile — Python prose no linter sees
 profiles/ruff.toml             akmon's Python rules — a standard ruff configuration
 profiles/python-stdlib.md      environment profile — code that runs on a bare interpreter
@@ -273,7 +274,7 @@ Decided by the owner (this session); recorded in
 
 ## 11. Slices
 
-1. **Placement** — in the tree. `_common.md` § Code design; `profiles/python.md`,
+1. **Placement** — in the tree. `_common.md` § Code design (since moved to `rules/code.md`, ADR 0014 amendment); `profiles/python.md`,
    `profiles/python-stdlib.md`; `guardrails/python.md` removed; `sync`, materialization, `verify`,
    `init` and the docs follow. Carriers: an imported profile is materialized and kept fresh; the
    old import is a plan error naming the fix, in package and mounted mode.

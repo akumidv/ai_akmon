@@ -54,7 +54,7 @@ project-local hook surface.
   a `developer` run still fails open ([ADR 0013](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0013-hook-survivability-and-crash-posture.md)),
   and the Codex `git-commit-guard` route does the same (exit 0 with the deny for an autonomous run, exit 1 for a
   developer). The same hook carries the **harness-settings write guard's shell half**
-  (`privilege_escalation_guard_result`, policy `privilege.no-escalation`, every actor): a command whose words write
+  (`privilege_escalation_guard_result`, policy `privilege.no-escalation`, every actor): a Bash command containing `sudo` is denied, and so is a command whose words write
   `.claude/settings*.json` or `.codex/config.toml` (an output redirection, `tee`, `sed -i`, `perl -i`, a
   `cp`/`mv`/`install` destination, `dd of=`) is denied; a read passes. A `developer` is asked for the forge's pull-request, merge and release commands. That ask reaches the owner when the run is attended and
   becomes a `deny` when it is not: the entry point reads `CLAUDE_CODE_SESSION_ATTENDED` (`1`

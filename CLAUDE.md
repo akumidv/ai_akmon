@@ -5,9 +5,8 @@
 This project uses **[AGENTS.md](AGENTS.md)** as the single source of guidance for AI
 coding agents (including Claude Code).
 
-Claude Code reads `CLAUDE.md`; AGENTS.md is imported below so the canonical rules, including
-the always-on prime directives and "read `meta/memory/` at session start", are in
-context from the start on every Claude Code version, whether or not it also loads `AGENTS.md`
-on its own.
+Claude Code reads `CLAUDE.md`; AGENTS.md is imported below so the rules it imports (the
+guardrails, rules and language profiles) are in context from the start on every Claude Code
+version, whether or not it also loads `AGENTS.md` on its own.
 
 @AGENTS.md
