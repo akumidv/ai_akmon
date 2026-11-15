@@ -567,9 +567,13 @@ def _skill_sources(root: Path) -> tuple[list[Path], list[str]]:
     sources: list[Path] = []
     errors: list[str] = []
     names: dict[str, Path] = {}
+    # Two roots can be one folder (akmon on itself: the running tree is the project root); it is
+    # read once, and the sources keep the spelling of the root that reached it first.
+    seen: set[Path] = set()
     for search_root in search_roots:
-        if not search_root.is_dir():
+        if not search_root.is_dir() or search_root.resolve() in seen:
             continue
+        seen.add(search_root.resolve())
         for source in sorted(search_root.glob("*/SKILL.md")):
             name = source.parent.name
             if name in names:

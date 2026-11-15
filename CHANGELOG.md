@@ -282,6 +282,10 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   project overlay that sets neither is unaffected.
 
 ### Fixed
+- **`sync` no longer reports every skill as a duplicate when two search roots are the same folder (C207).**
+  Running akmon on itself, the standard tree is the project root, so `skills/` was read twice and
+  each skill was flagged `duplicate skill name`; a folder reached through two roots is now read
+  once, and two different folders holding one name stay an error.
 - **A hook `ask` reaches an owner who is present ([ADR-0025](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0025-actors-and-action-repertoire.md)/D06, C178).**
   The commit guard's `push`/`tag`/`merge` and commit-on-the-default-branch ask, and the delegation
   tier-floor ask, were turned into a deny whenever `permission_mode` was not `default`, so an

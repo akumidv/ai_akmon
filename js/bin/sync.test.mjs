@@ -711,6 +711,18 @@ test("a duplicate skill name is a plan error; the first source wins", () => {
   });
 });
 
+test("one folder reached through two search roots is read once", () => {
+  withScratch((scratch) => {
+    const root = mountedProject(scratch);
+    fs.rmSync(posix.join(root, "_aitna", "akmon"));
+    fs.symlinkSync(root, posix.join(root, "_aitna", "akmon"));
+    put(root, "skills/alpha/SKILL.md", "---\nname: alpha\n---\n");
+    const [sources, errors] = skillSources(data, root);
+    assert.deepEqual(sources, [posix.join(root, "_aitna/akmon/skills/alpha/SKILL.md")]);
+    assert.deepEqual(errors, []);
+  });
+});
+
 test("usage errors are one line and exit 2; --help is exit 0", () => {
   for (const argv of [["--bogus"], ["extra"], ["--project-root"], ["--check", "--dry-run"]]) {
     const result = run(argv);

@@ -1238,10 +1238,19 @@ export function skillSources(data, root) {
   const errors = [];
   /** @type {Map<string, string>} */
   const names = new Map();
+  // Two roots can be one folder (akmon on itself: the running tree is the project root); it is read
+  // once, and the sources keep the spelling of the root that reached it first.
+  /** @type {Set<string>} */
+  const seen = new Set();
   for (const searchRoot of searchRoots) {
     if (!isDir(searchRoot)) {
       continue;
     }
+    const real = fs.realpathSync(searchRoot);
+    if (seen.has(real)) {
+      continue;
+    }
+    seen.add(real);
     for (const source of _globSkills(searchRoot)) {
       const name = posix.basename(posix.dirname(source));
       if (names.has(name)) {

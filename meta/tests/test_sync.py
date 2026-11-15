@@ -135,6 +135,17 @@ def test_skill_sources_reports_duplicate_names(tmp_path):
     assert any("duplicate skill name" in error for error in errors)
 
 
+def test_skill_sources_reads_one_folder_reached_through_two_roots_once(tmp_path):
+    # akmon on itself: the mount directory resolves to the project root, so the standard's
+    # `skills/` and the project's own `skills/` are one folder.
+    _make_skill(tmp_path, "skills", "alpha")
+    (tmp_path / "_aitna").mkdir()
+    (tmp_path / "_aitna" / "akmon").symlink_to(tmp_path, target_is_directory=True)
+    sources, errors = sync._skill_sources(tmp_path)
+    assert [source.parent.name for source in sources] == ["alpha"]
+    assert errors == []
+
+
 # --------------------------------------------------------------------------------------
 # _claude_settings / _planned_files / _apply
 # --------------------------------------------------------------------------------------
