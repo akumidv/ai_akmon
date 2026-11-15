@@ -2,7 +2,8 @@
 
 Parses the delegation log, the session transcript(s), and (optionally) the Claude API
 usage endpoint to produce an on-demand digest of a session's routing activity: how much
-was delegated, where the tokens went, and how much budget remains. Stdlib-only.
+was delegated, where the tokens went, how much budget remains, and (task A49) what share of the
+project's sessions needed code at all. Stdlib-only.
 
 Pure aggregation lives in plain functions that take already-read data (lines, dicts);
 I/O — filesystem walks, reading files, the HTTP call — sits in thin wrappers around them,
@@ -17,11 +18,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import urllib.request
 from collections import Counter
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -165,10 +167,15 @@ def parse_delegation_log(path: Path) -> DelegationStats | None:
 
 @dataclass
 class TranscriptStats:
-    """Aggregated main-session transcript stats: per-model token usage + a user-message count."""
+    """Aggregated main-session transcript stats: per-model token usage + a user-message count.
+
+    ``code_touch`` is the scan of the directory the transcript sits in (task A49), set by ``main``
+    once the transcript is read; it is ``None`` until then and for a transcript that is not found.
+    """
 
     per_model: dict[str, TokenUsage] = field(default_factory=dict)
     user_message_count: int = 0
+    code_touch: CodeTouchStats | None = None
 
 
 def aggregate_transcript_lines(lines: Iterable[str]) -> TranscriptStats:
@@ -293,6 +300,182 @@ def collect_subagent_stats(subagents_dir: Path, tier_map: dict[str, str] | None 
 
 
 # --------------------------------------------------------------------------------------
+# Code touch — which sessions needed code at all (task A49)
+# --------------------------------------------------------------------------------------
+
+#: The three classes a session falls into, from the strongest touch of code to none.
+CODE_EDIT = "code-edit"
+CODE_READ = "code-read"
+NO_CODE = "no-code"
+
+
+@dataclass(frozen=True)
+class TouchRules:
+    """What counts as touching code: the tools, the code-file extensions, the test-command pattern."""
+
+    code_extensions: frozenset[str]
+    edit_tools: frozenset[str]
+    read_tools: frozenset[str]
+    shell_tools: frozenset[str]
+    path_fields: tuple[str, ...]
+    command_pattern: re.Pattern[str]
+    system_reminder_prefix: str
+
+
+def touch_rules(data: dict) -> TouchRules:
+    """The rules from the ``code_touch`` block of ``stats.json`` (``data`` is the whole file)."""
+    block = data["code_touch"]
+    alternatives = "|".join(block["test_command_patterns"])
+    return TouchRules(
+        code_extensions=frozenset(block["code_extensions"]),
+        edit_tools=frozenset(block["edit_tools"]),
+        read_tools=frozenset(block["read_tools"]),
+        shell_tools=frozenset(block["shell_tools"]),
+        path_fields=tuple(block["path_fields"]),
+        command_pattern=re.compile(rf"\b(?:{alternatives})\b", re.ASCII),
+        system_reminder_prefix=block["system_reminder_prefix"],
+    )
+
+
+@dataclass(frozen=True)
+class SessionTouch:
+    """One transcript classified: its class, the user turn of its first code touch, its label.
+
+    ``label`` is the subagent type for a subagent transcript and ``-`` for a main session.
+    """
+
+    kind: str
+    first_touch_turn: int | None
+    label: str = "-"
+
+
+@dataclass(frozen=True)
+class CodeTouchStats:
+    """Every classified main session and subagent transcript found beside the located transcript."""
+
+    scanned: Path
+    main: list[SessionTouch]
+    subagents: list[SessionTouch]
+
+
+def _is_user_turn(record: dict, rules: TouchRules) -> bool:
+    """A prompt typed by the user: not a tool result, not a meta or system-reminder record."""
+    if record.get("type") != "user" or record.get("isMeta"):
+        return False
+    message = record.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        return not content.startswith(rules.system_reminder_prefix)
+    if isinstance(content, list):
+        kinds = {item.get("type") for item in content if isinstance(item, dict)}
+        return "tool_result" not in kinds and "text" in kinds
+    return False
+
+
+def _touches_code(tool_use: dict, rules: TouchRules) -> str | None:
+    """``CODE_EDIT`` or ``CODE_READ`` when one tool call touches code, else ``None``."""
+    name = tool_use.get("name")
+    tool_input = tool_use.get("input")
+    if not isinstance(name, str) or not isinstance(tool_input, dict):
+        return None
+    if name in rules.shell_tools:
+        command = tool_input.get("command")
+        if isinstance(command, str) and rules.command_pattern.search(command):
+            return CODE_READ
+        return None
+    if name not in rules.edit_tools and name not in rules.read_tools:
+        return None
+    target = next((tool_input[field] for field in rules.path_fields if tool_input.get(field)), "")
+    if not isinstance(target, str) or Path(target).suffix.lower() not in rules.code_extensions:
+        return None
+    return CODE_EDIT if name in rules.edit_tools else CODE_READ
+
+
+def _json_records(lines: Iterable[str]) -> Iterator[dict]:
+    """The lines that are JSON objects; blank, unparseable and non-object lines are passed over."""
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            yield record
+
+
+def _tool_uses(record: dict) -> Iterator[dict]:
+    """The ``tool_use`` items of an assistant record."""
+    message = record.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if record.get("type") != "assistant" or not isinstance(content, list):
+        return
+    yield from (item for item in content if isinstance(item, dict) and item.get("type") == "tool_use")
+
+
+def classify_session_lines(lines: Iterable[str], rules: TouchRules) -> SessionTouch | None:
+    """Classify one transcript; ``None`` when it holds no user turn (nothing asked, nothing to measure).
+
+    A code *edit* is an edit tool on a code file; a code *read* is a read tool on a code file or a
+    shell command running the project's tests, linters or tools. A shell write (heredoc, ``sed -i``)
+    and ``Grep``/``Glob`` are not counted, so ``NO_CODE`` is an upper bound on the sessions that
+    never touched code. ``first_touch_turn`` is how many user turns had been seen at the first edit
+    or read, whichever came first. The label is the transcript's ``attributionAgent``, else ``-``.
+    """
+    turns = 0
+    edited = False
+    first_touch_turn: int | None = None
+    label = "-"
+    for record in _json_records(lines):
+        attribution = record.get("attributionAgent")
+        if label == "-" and isinstance(attribution, str) and attribution:
+            label = attribution
+        if _is_user_turn(record, rules):
+            turns += 1
+            continue
+        for tool_use in _tool_uses(record):
+            kind = _touches_code(tool_use, rules)
+            if kind is None:
+                continue
+            edited = edited or kind == CODE_EDIT
+            if first_touch_turn is None:
+                first_touch_turn = turns
+    if turns == 0:
+        return None
+    if edited:
+        return SessionTouch(CODE_EDIT, first_touch_turn, label)
+    return SessionTouch(NO_CODE if first_touch_turn is None else CODE_READ, first_touch_turn, label)
+
+
+def _read_lines(path: Path) -> list[str]:
+    return path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+
+def collect_code_touch(transcripts_directory: Path, rules: TouchRules) -> CodeTouchStats | None:
+    """Classify every session of a transcript directory and every subagent transcript under it.
+
+    Main sessions are the ``*.jsonl`` files of the directory; subagents are
+    ``<directory>/<session>/subagents/agent-*.jsonl``, labelled by their ``.meta.json`` ``agentType``
+    (else their ``attributionAgent``). ``None`` when the directory is missing.
+    """
+    if not transcripts_directory.is_dir():
+        return None
+    main: list[SessionTouch] = []
+    for path in sorted(transcripts_directory.glob("*.jsonl")):
+        touch = classify_session_lines(_read_lines(path), rules)
+        if touch is not None:
+            main.append(touch)
+    subagents: list[SessionTouch] = []
+    for path in sorted(transcripts_directory.glob("*/subagents/agent-*.jsonl")):
+        touch = classify_session_lines(_read_lines(path), rules)
+        if touch is not None:
+            label, _tier = label_and_tier(_read_json_dict(path.parent / f"{path.stem}.meta.json"), touch.label, {})
+            subagents.append(replace(touch, label=label))
+    return CodeTouchStats(transcripts_directory, main, subagents)
+
+
+# --------------------------------------------------------------------------------------
 # Budget — Claude API usage endpoint (opt out with --no-budget)
 # --------------------------------------------------------------------------------------
 
@@ -401,6 +584,132 @@ def _fmt_pct(value: float | None) -> str:
 
 def _fmt_resets(value: str | None) -> str:
     return value or "-"
+
+
+def _percent(count: int, total: int) -> int:
+    """``count`` of ``total`` as a whole percent, halves rounded up — integer arithmetic, so both twins agree."""
+    return (200 * count + total) // (2 * total)
+
+
+def _share(count: int, total: int) -> str:
+    return f"{_percent(count, total)}%" if total else "-"
+
+
+def _median_text(values: Iterable[int]) -> str:
+    """The median of whole numbers, ``-`` for none; an even count between two odd values ends in ``.5``."""
+    ordered = sorted(values)
+    if not ordered:
+        return "-"
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return str(ordered[middle])
+    pair = ordered[middle - 1] + ordered[middle]
+    return str(pair // 2) if pair % 2 == 0 else f"{pair // 2}.5"
+
+
+@dataclass(frozen=True)
+class _Group:
+    """The class counts of one group of transcripts, as the texts the digest and the report print."""
+
+    n: int
+    edit: str
+    read: str
+    none: str
+    median: str
+
+
+def _group(touches: Sequence[SessionTouch]) -> _Group:
+    total = len(touches)
+    counts = Counter(touch.kind for touch in touches)
+    turns = [touch.first_touch_turn for touch in touches if touch.first_touch_turn is not None]
+    return _Group(
+        n=total,
+        edit=f"{counts[CODE_EDIT]} ({_share(counts[CODE_EDIT], total)})",
+        read=f"{counts[CODE_READ]} ({_share(counts[CODE_READ], total)})",
+        none=f"{counts[NO_CODE]} ({_share(counts[NO_CODE], total)})",
+        median=_median_text(turns),
+    )
+
+
+def _no_code_by_type(subagents: Sequence[SessionTouch]) -> list[tuple[str, int, int]]:
+    """``(type, transcripts, no-code transcripts)`` per subagent type, the largest no-code share first."""
+    totals: Counter[str] = Counter(touch.label for touch in subagents)
+    empty: Counter[str] = Counter(touch.label for touch in subagents if touch.kind == NO_CODE)
+    rows = [(label, totals[label], empty[label]) for label in totals]
+    return sorted(rows, key=lambda row: (-_percent(row[2], row[1]), row[0]))
+
+
+def _render_code_touch_digest(code_touch: CodeTouchStats | None) -> list[str]:
+    """The digest's code-touch lines: both groups, the no-code share per subagent type, the limit."""
+    data = _stats_data()
+    texts = data["digest"]
+    groups = data["code_touch"]
+    if code_touch is None or not (code_touch.main or code_touch.subagents):
+        return [texts["code_touch_none"]]
+    lines: list[str] = []
+    for name, touches in ((groups["group_main"], code_touch.main), (groups["group_subagents"], code_touch.subagents)):
+        if not touches:
+            lines.append(jsondata.fill(texts["code_touch_group_empty"], {"group": name}))
+            continue
+        group = _group(touches)
+        lines.append(
+            jsondata.fill(
+                texts["code_touch_group"],
+                {
+                    "group": name,
+                    "n": str(group.n),
+                    "edit": group.edit,
+                    "read": group.read,
+                    "none": group.none,
+                    "median": group.median,
+                },
+            )
+        )
+    if code_touch.subagents:
+        types = ", ".join(
+            f"{label} {_share(empty, total)} (n={total})"
+            for label, total, empty in _no_code_by_type(code_touch.subagents)
+        )
+        lines.append(jsondata.fill(texts["code_touch_no_code_by_type"], {"types": types}))
+    lines.append(texts["code_touch_limit"])
+    return lines
+
+
+def _render_code_touch_section(code_touch: CodeTouchStats | None) -> list[str]:
+    """The '## Code touch' body: a table per group, a table per subagent type, the definitions."""
+    data = _stats_data()
+    texts = data["report"]
+    groups = data["code_touch"]
+    if code_touch is None or not (code_touch.main or code_touch.subagents):
+        return [texts["code_touch_none"]]
+    lines = [jsondata.fill(texts["code_touch_scanned"], {"dir": str(code_touch.scanned)}), ""]
+    lines.extend(texts["code_touch_group_header"])
+    for name, touches in ((groups["group_main"], code_touch.main), (groups["group_subagents"], code_touch.subagents)):
+        group = _group(touches)
+        lines.append(
+            jsondata.fill(
+                texts["code_touch_group_row"],
+                {
+                    "group": name,
+                    "n": str(group.n),
+                    "edit": group.edit,
+                    "read": group.read,
+                    "none": group.none,
+                    "median": group.median,
+                },
+            )
+        )
+    if code_touch.subagents:
+        lines.extend(["", *texts["code_touch_type_header"]])
+        lines.extend(
+            jsondata.fill(
+                texts["code_touch_type_row"],
+                {"type": label, "n": str(total), "none": str(empty), "share": _share(empty, total)},
+            )
+            for label, total, empty in _no_code_by_type(code_touch.subagents)
+        )
+    lines.extend(["", texts["code_touch_note"]])
+    return lines
 
 
 @dataclass(frozen=True)
@@ -529,7 +838,7 @@ def render_report(
     subagents: list[SubagentRecord],
     budget: BudgetSummary,
 ) -> str:
-    """Full markdown report (file) — delegations, per-role tokens, budget."""
+    """Full markdown report (file) — delegations, per-role tokens, code touch, budget."""
     data = _stats_data()["report"]
     transcript_path = session.transcript_path
     lines = [jsondata.fill(data["title"], {"stem": session.stem}), ""]
@@ -550,6 +859,11 @@ def render_report(
     lines.extend(_render_tokens_section(transcript_stats, subagents))
     lines.append("")
 
+    lines.append(data["code_touch_heading"])
+    lines.append("")
+    lines.extend(_render_code_touch_section(transcript_stats.code_touch if transcript_stats else None))
+    lines.append("")
+
     lines.append(data["budget_heading"])
     lines.append("")
     lines.extend(_render_budget_section(budget))
@@ -568,7 +882,7 @@ def render_digest(
     budget: BudgetSummary,
     report_path: Path,
 ) -> str:
-    """Compact stdout digest (~8-12 lines) — relayed to chat verbatim by the calling skill."""
+    """Compact stdout digest (~12-16 lines) — relayed to chat verbatim by the calling skill."""
     data = _stats_data()["digest"]
     lines: list[str] = []
 
@@ -612,6 +926,8 @@ def render_digest(
         )
     else:
         lines.append(data["no_subagent_transcripts"])
+
+    lines.extend(_render_code_touch_digest(transcript_stats.code_touch if transcript_stats else None))
 
     if budget.unavailable:
         lines.append(jsondata.fill(data["budget_unavailable"], {"reason": budget.unavailable}))
@@ -678,6 +994,9 @@ def main(argv: list[str] | None = None) -> int:
         subagents_dir = transcript_path.parent / session_stem / "subagents"
         subagent_records = collect_subagent_stats(subagents_dir)
 
+    if transcript_stats is not None and transcript_path is not None:
+        transcript_stats.code_touch = collect_code_touch(transcript_path.parent, touch_rules(_stats_data()))
+
     budget = BudgetSummary(unavailable="skipped (--no-budget)") if args.no_budget else budget_summary()
 
     report_dir = args.report_dir or (root / report_dir_rel())
@@ -685,7 +1004,11 @@ def main(argv: list[str] | None = None) -> int:
         report_dir,
         report_prefix("stats", args.task),
         render_report(
-            SessionRef(session_stem, transcript_path), delegation, transcript_stats, subagent_records, budget
+            SessionRef(session_stem, transcript_path),
+            delegation,
+            transcript_stats,
+            subagent_records,
+            budget,
         ),
     )
 

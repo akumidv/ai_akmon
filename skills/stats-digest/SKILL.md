@@ -26,8 +26,8 @@ never in the orchestrator.
    akmon tool model_routing/stats     # a Node project: npx akmon tool model_routing/stats
    ```
 
-   It parses the delegation log (`.claude/model-routing.log`) and the current session
-   transcript, queries the Claude API for remaining session/week budget (degrades to
+   It parses the delegation log (`.claude/model-routing.log`), the current session
+   transcript and the sessions recorded beside it (the code-touch metric below), queries the Claude API for remaining session/week budget (degrades to
    `budget: unavailable` without blocking), writes the full report to
    `.claude/stats/[<task>-]stats-<n>.md` (`n` the next free ordinal), and prints the digest. The report write is the
    tool's own output file — sanctioned, not a project mutation.
@@ -39,12 +39,34 @@ never in the orchestrator.
    evidence*, nothing more.
 
 3. **Deliver in chat**: the tool digest (delegations by subagent/tier/model · tokens per
-   role · remaining budget · report path) plus the learn-loop proposals.
+   role · code touch · remaining budget · report path) plus the learn-loop proposals.
 
 4. **Gate persistence on the owner.** Recommendations are proposals; write to `memory/`
    or draft a skill/tool only after the owner explicitly confirms, per
    [memory-distill](../../pipelines/memory-distill.md) and guardrails
    ([analysis before mutation](../../guardrails/_common.md#analysis-before-mutation)).
+
+## Code touch — the share of sessions that needed code
+
+The digest's `code touch` lines answer one repeatable question: *what share of this project's
+sessions needed code at all?* The tool classifies every main session and every subagent
+transcript recorded beside the current one (a transcript with no user turn is left out):
+
+- **code-edit** — an Edit, Write, MultiEdit or NotebookEdit on a code file;
+- **code-read** — no code edit, but a Read of a code file or a Bash command running the project's
+  tests, linters or tools;
+- **no-code** — neither.
+
+It reports counts and shares for main sessions and for subagents, the no-code share per subagent
+type, and the median user turn of the first code touch. What counts as a code file or a test
+command is data (`code_touch` in
+[`stats.json`](../../tools/model_routing/stats.json)). **The limit:** a Bash write (a heredoc,
+`sed -i`) and Grep/Glob are not counted, so a no-code share is an upper bound — the output says so.
+
+**The principle.** Loading a rule on demand saves context only in the sessions that never need
+it. Before moving a rule from session start to on-demand, measure the share of sessions that never
+touch what it governs; where nearly every session needs it at once, on-demand loading only delays
+the same load.
 
 ## Flags
 

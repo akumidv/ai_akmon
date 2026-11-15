@@ -30,6 +30,15 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   your ignore list.
 
 ### Added
+- **`stats-digest` reports what share of sessions needed code (A49).** The digest and the full report
+  of `akmon tool model_routing/stats` gain a code-touch section: every main session and subagent
+  transcript beside the located transcript is classified `code-edit` (an Edit, Write, MultiEdit or
+  NotebookEdit on a code file), `code-read` (a Read of a code file or a Bash command running tests,
+  linters or tools) or `no-code`, with counts and shares per group, the no-code share per subagent type
+  and the median user turn of the first touch. What counts as code (extensions, tools, test-command
+  patterns) is data in `tools/model_routing/stats.json`; a Bash write and Grep/Glob are not counted,
+  which the output says. The skill carries the principle: measure the share of sessions that never touch
+  what a rule governs before moving that rule from session start to on-demand loading.
 - **Knowledge lookup: gather with the user what no source gives; industry practice before a math question (C206).**
   A new pipeline, `pipelines/knowledge-lookup.md`, linked from the common guardrail: knowledge comes
   from the project's records, then documentation, then the ordinary web request; what a bot check or a

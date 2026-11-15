@@ -398,13 +398,229 @@ def test_main_with_a_task_takes_the_next_ordinal_of_that_prefix(tmp_path, capsys
 
 
 # --------------------------------------------------------------------------------------
+# A49: code touch — which sessions needed code at all
+# --------------------------------------------------------------------------------------
+
+
+def _rules() -> stats.TouchRules:
+    return stats.touch_rules(stats._stats_data())
+
+
+def _scanned(code_touch: stats.CodeTouchStats | None) -> stats.TranscriptStats:
+    return stats.TranscriptStats(code_touch=code_touch)
+
+
+def _prompt(text: str = "do it") -> str:
+    return json.dumps({"type": "user", "message": {"content": text}})
+
+
+def _tool_use(name: str, **tool_input: object) -> str:
+    item = {"type": "tool_use", "name": name, "input": tool_input}
+    return json.dumps({"type": "assistant", "message": {"content": [item]}})
+
+
+def _tool_result() -> str:
+    item = {"type": "tool_result", "content": "ok"}
+    return json.dumps({"type": "user", "message": {"content": [item]}})
+
+
+def test_a_session_with_no_user_turn_is_not_classified():
+    lines = [_tool_use("Edit", file_path="/p/a.py"), _tool_result()]
+    assert stats.classify_session_lines(lines, _rules()) is None
+
+
+def test_system_reminder_meta_and_tool_result_records_are_not_user_turns():
+    lines = [
+        _prompt("<system-reminder>context</system-reminder>"),
+        json.dumps({"type": "user", "isMeta": True, "message": {"content": "meta"}}),
+        _tool_result(),
+        json.dumps({"type": "user", "message": {"content": [{"type": "text", "text": "typed"}]}}),
+    ]
+    touch = stats.classify_session_lines(lines, _rules())
+    assert touch == stats.SessionTouch(stats.NO_CODE, None)
+
+
+def test_an_edit_of_a_code_file_is_code_edit_and_records_the_turn_of_the_first_touch():
+    lines = [
+        _prompt(),
+        _tool_use("Read", file_path="/p/docs/a.md"),
+        _prompt("again"),
+        _tool_use("Read", file_path="/p/a.py"),
+        _prompt("and again"),
+        _tool_use("Write", file_path="/p/b.mjs"),
+    ]
+    touch = stats.classify_session_lines(lines, _rules())
+    assert touch == stats.SessionTouch(stats.CODE_EDIT, 2)
+
+
+def test_a_notebook_edit_reads_its_notebook_path_and_a_config_edit_is_no_touch():
+    rules = _rules()
+    assert stats.classify_session_lines([_prompt(), _tool_use("Edit", file_path="/p/c.toml")], rules).kind == (
+        stats.NO_CODE
+    )
+    # A .ipynb is not a code extension, so a NotebookEdit on one counts for nothing.
+    assert stats.classify_session_lines(
+        [_prompt(), _tool_use("NotebookEdit", notebook_path="/p/n.ipynb")], rules
+    ).kind == (stats.NO_CODE)
+    assert stats.classify_session_lines(
+        [_prompt(), _tool_use("NotebookEdit", notebook_path="/p/n.py")], rules
+    ).kind == (stats.CODE_EDIT)
+
+
+def test_a_read_of_a_code_file_or_a_test_command_is_code_read():
+    rules = _rules()
+    read = stats.classify_session_lines([_prompt(), _tool_use("Read", file_path="/p/A.PY")], rules)
+    assert read == stats.SessionTouch(stats.CODE_READ, 1)
+    ran = stats.classify_session_lines([_prompt(), _prompt(), _tool_use("Bash", command="uv run pytest -q")], rules)
+    assert ran == stats.SessionTouch(stats.CODE_READ, 2)
+
+
+def test_a_command_that_only_contains_a_test_word_inside_another_word_is_no_touch():
+    rules = _rules()
+    lines = [_prompt(), _tool_use("Bash", command="git log --oneline"), _tool_use("Bash", command="echo subtsc")]
+    assert stats.classify_session_lines(lines, rules).kind == stats.NO_CODE
+
+
+def test_a_bash_write_and_a_search_are_not_counted_the_stated_limit():
+    lines = [
+        _prompt(),
+        _tool_use("Bash", command="cat > tools/a.py <<'EOF'\nx = 1\nEOF"),
+        _tool_use("Grep", pattern="x", path="tools"),
+        _tool_use("Glob", pattern="**/*.py"),
+    ]
+    assert stats.classify_session_lines(lines, _rules()).kind == stats.NO_CODE
+
+
+def test_a_malformed_record_is_passed_over():
+    lines = ["", "not json", "[1]", json.dumps({"type": "assistant", "message": {"content": "text"}}), _prompt()]
+    assert stats.classify_session_lines(lines, _rules()) == stats.SessionTouch(stats.NO_CODE, None)
+
+
+def test_the_label_is_the_attribution_agent():
+    lines = [json.dumps({"type": "user", "attributionAgent": "k_explorer", "message": {"content": "go"}})]
+    assert stats.classify_session_lines(lines, _rules()).label == "k_explorer"
+
+
+def _write_lines(path: Path, lines: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _code_touch_fixture(root: Path) -> None:
+    _write_lines(root / "a.jsonl", [_prompt(), _tool_use("Edit", file_path="/p/a.py")])
+    _write_lines(root / "b.jsonl", [_prompt(), _tool_use("Read", file_path="/p/b.js")])
+    _write_lines(root / "c.jsonl", [_prompt()])
+    _write_lines(root / "d.jsonl", [_tool_use("Edit", file_path="/p/a.py")])  # no user turn: left out
+    _write_lines(root / "a" / "subagents" / "agent-1.jsonl", [_prompt(), _tool_use("Write", file_path="/p/n.ts")])
+    (root / "a" / "subagents" / "agent-1.meta.json").write_text('{"agentType": "k_implementer"}', encoding="utf-8")
+    _write_lines(root / "a" / "subagents" / "agent-2.jsonl", [_prompt()])
+    (root / "a" / "subagents" / "agent-2.meta.json").write_text('{"agentType": "k_explorer"}', encoding="utf-8")
+    _write_lines(
+        root / "b" / "subagents" / "agent-3.jsonl",
+        [json.dumps({"type": "user", "attributionAgent": "k_explorer", "message": {"content": "go"}})],
+    )
+
+
+def test_collect_code_touch_missing_directory_is_none(tmp_path):
+    assert stats.collect_code_touch(tmp_path / "absent", _rules()) is None
+
+
+def test_collect_code_touch_classifies_main_sessions_and_labelled_subagents(tmp_path):
+    _code_touch_fixture(tmp_path)
+    result = stats.collect_code_touch(tmp_path, _rules())
+    assert result.scanned == tmp_path
+    assert [touch.kind for touch in result.main] == [stats.CODE_EDIT, stats.CODE_READ, stats.NO_CODE]
+    assert [(touch.label, touch.kind) for touch in result.subagents] == [
+        ("k_implementer", stats.CODE_EDIT),
+        ("k_explorer", stats.NO_CODE),
+        ("k_explorer", stats.NO_CODE),
+    ]
+
+
+def test_median_text_is_whole_for_an_odd_count_and_half_steps_for_an_even_one():
+    assert stats._median_text([]) == "-"
+    assert stats._median_text([3, 1, 2]) == "2"
+    assert stats._median_text([1, 3]) == "2"
+    assert stats._median_text([1, 2]) == "1.5"
+
+
+def test_percent_rounds_halves_up_in_integer_arithmetic():
+    assert [stats._percent(count, 8) for count in range(9)] == [0, 13, 25, 38, 50, 63, 75, 88, 100]
+    assert stats._share(0, 0) == "-"
+
+
+def test_the_digest_reports_both_groups_the_type_shares_and_the_limit(tmp_path):
+    _code_touch_fixture(tmp_path)
+    code_touch = stats.collect_code_touch(tmp_path, _rules())
+    lines = stats.render_digest(None, _scanned(code_touch), [], stats.BudgetSummary(), Path("r.md")).splitlines()
+    assert (
+        "code touch, main sessions (n=3): code-edit 1 (33%), code-read 1 (33%), no-code 1 (33%);"
+        " median first touch at user turn 1"
+    ) in lines
+    assert (
+        "code touch, subagents (n=3): code-edit 1 (33%), code-read 0 (0%), no-code 2 (67%);"
+        " median first touch at user turn 1"
+    ) in lines
+    assert "code touch, no-code share by subagent type: k_explorer 100% (n=2), k_implementer 0% (n=1)" in lines
+    assert any(line.startswith("code touch: a Bash write") for line in lines)
+
+
+def test_the_digest_with_no_session_says_so_once(tmp_path):
+    empty = stats.collect_code_touch(tmp_path, _rules())
+    for code_touch in (None, empty):
+        lines = stats.render_digest(None, _scanned(code_touch), [], stats.BudgetSummary(), Path("r.md")).splitlines()
+        assert "code touch: no session transcript with a user turn" in lines
+        assert not any(line.startswith("code touch,") for line in lines)
+
+
+def test_the_digest_names_a_group_with_no_transcript(tmp_path):
+    _write_lines(tmp_path / "a.jsonl", [_prompt()])
+    code_touch = stats.collect_code_touch(tmp_path, _rules())
+    lines = stats.render_digest(None, _scanned(code_touch), [], stats.BudgetSummary(), Path("r.md")).splitlines()
+    assert "code touch, subagents: no transcript with a user turn" in lines
+    assert not any("by subagent type" in line for line in lines)
+
+
+def test_the_report_has_a_code_touch_section_with_group_and_type_tables(tmp_path):
+    _code_touch_fixture(tmp_path)
+    code_touch = stats.collect_code_touch(tmp_path, _rules())
+    session = stats.SessionRef("main", tmp_path / "a.jsonl")
+    report = stats.render_report(session, None, _scanned(code_touch), [], stats.BudgetSummary())
+    assert "## Code touch" in report
+    assert "| main sessions | 3 | 1 (33%) | 1 (33%) | 1 (33%) | 1 |" in report
+    assert "| subagents | 3 | 1 (33%) | 0 (0%) | 2 (67%) | 1 |" in report
+    assert "| k_explorer | 2 | 2 | 100% |" in report
+    assert "upper bound" in report
+    assert report.index("## Tokens") < report.index("## Code touch") < report.index("## Budget")
+
+
+def test_main_scans_the_directory_of_the_located_transcript(tmp_path, capsys):
+    sessions = tmp_path / "sessions"
+    _code_touch_fixture(sessions)
+    argv = ["--project-root", str(tmp_path), "--transcript", str(sessions / "a.jsonl"), "--no-budget"]
+    argv += ["--report-dir", str(tmp_path / "reports")]
+    assert stats.main(argv) == 0
+    assert "code touch, main sessions (n=3)" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------------------
 # C102: stats.json — the digest and report texts
 # --------------------------------------------------------------------------------------
 
 
 def test_stats_data_pins_the_structure_and_characteristic_texts():
     data = json.loads((_ROUTING_DIR / "stats.json").read_text(encoding="utf-8"))
-    assert set(data) == {"usage_url", "credentials_rel", "report_dir_rel", "budget_labels", "digest", "report"}
+    assert set(data) == {
+        "usage_url",
+        "credentials_rel",
+        "report_dir_rel",
+        "budget_labels",
+        "code_touch",
+        "digest",
+        "report",
+    }
+    assert data["code_touch"]["edit_tools"] == ["Edit", "Write", "MultiEdit", "NotebookEdit"]
+    assert ".py" in data["code_touch"]["code_extensions"]
     assert data["usage_url"] == "https://api.anthropic.com/api/oauth/usage"
     assert data["credentials_rel"] == ".claude/.credentials.json"
     assert data["report_dir_rel"] == ".claude/stats"

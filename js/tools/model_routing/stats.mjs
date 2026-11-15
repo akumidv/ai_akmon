@@ -6,7 +6,8 @@
  *
  * Parses the delegation log, the session transcript(s), and (optionally) the Claude API usage
  * endpoint to produce an on-demand digest of a session's routing activity: how much was
- * delegated, where the tokens went, and how much budget remains.
+ * delegated, where the tokens went, how much budget remains, and (task A49) what share of the
+ * project's sessions needed code at all.
  *
  * Pure aggregation lives in plain functions that take already-read data (lines, objects); I/O —
  * filesystem walks, reading files, the HTTP call — sits in thin wrappers around them, so the
@@ -33,7 +34,7 @@
 
 import fs from "node:fs";
 import os from "node:os";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -50,6 +51,7 @@ import {
   isDir,
   isFile,
   pyIterate,
+  pyLower,
   pyPath,
   pySplitlines,
   pyStr,
@@ -70,12 +72,27 @@ export { mungedProjectDir, newestJsonl, transcriptsDir };
 /** @typedef {import("../../common/pyvalue.mjs").Json} Json */
 
 /**
+ * The `code_touch` block of `stats.json`.
+ * @typedef {object} CodeTouchData
+ * @property {string[]} code_extensions
+ * @property {string[]} edit_tools
+ * @property {string[]} read_tools
+ * @property {string[]} shell_tools
+ * @property {string[]} path_fields
+ * @property {string[]} test_command_patterns
+ * @property {string} system_reminder_prefix
+ * @property {string} group_main
+ * @property {string} group_subagents
+ */
+
+/**
  * The keys of `tools/model_routing/stats.json`.
  * @typedef {object} StatsData
  * @property {string} usage_url the usage endpoint the budget summary fetches
  * @property {string} credentials_rel the OAuth credentials file (home-relative)
  * @property {string} report_dir_rel the full-report output directory (project-root-relative)
  * @property {{session: string, week_all_models: string, week_scoped: string}} budget_labels
+ * @property {CodeTouchData} code_touch what counts as touching code, and the group names
  * @property {Record<string, string>} digest the compact stdout digest texts
  * @property {Record<string, any>} report the full-report texts (strings and string lists)
  */
@@ -260,12 +277,20 @@ export function parseDelegationLog(path) {
 // Main session transcript — `~/.claude/projects/<munged-root>/*.jsonl`
 // --------------------------------------------------------------------------------------
 
-/** Aggregated main-session transcript stats: per-model token usage + a user-message count. */
+/**
+ * Aggregated main-session transcript stats: per-model token usage + a user-message count, and the
+ * code-touch scan of the directory the transcript sits in once `main` has made it.
+ */
 export class TranscriptStats {
   constructor() {
     /** @type {Map<string, TokenUsage>} */
     this.perModel = new Map();
     this.userMessageCount = 0;
+    /**
+     * The scan of the directory the transcript sits in (A49), set by `main`; null until then.
+     * @type {CodeTouchStats | null}
+     */
+    this.codeTouch = null;
   }
 }
 
@@ -464,6 +489,269 @@ export function collectSubagentStats(subagentsDir, tierMap) {
 }
 
 // --------------------------------------------------------------------------------------
+// Code touch — which sessions needed code at all (task A49)
+// --------------------------------------------------------------------------------------
+
+/** The three classes a session falls into, from the strongest touch of code to none. */
+export const CODE_EDIT = "code-edit";
+export const CODE_READ = "code-read";
+export const NO_CODE = "no-code";
+
+/** What counts as touching code: the tools, the code-file extensions, the test-command pattern. */
+export class TouchRules {
+  /**
+   * @param {object} fields
+   * @param {Set<string>} fields.codeExtensions
+   * @param {Set<string>} fields.editTools
+   * @param {Set<string>} fields.readTools
+   * @param {Set<string>} fields.shellTools
+   * @param {string[]} fields.pathFields
+   * @param {RegExp} fields.commandPattern
+   * @param {string} fields.systemReminderPrefix
+   */
+  constructor({ codeExtensions, editTools, readTools, shellTools, pathFields, commandPattern, systemReminderPrefix }) {
+    this.codeExtensions = codeExtensions;
+    this.editTools = editTools;
+    this.readTools = readTools;
+    this.shellTools = shellTools;
+    this.pathFields = pathFields;
+    this.commandPattern = commandPattern;
+    this.systemReminderPrefix = systemReminderPrefix;
+    Object.freeze(this);
+  }
+}
+
+/**
+ * The rules from the `code_touch` block of `stats.json`.
+ * @param {StatsData} data the whole file
+ * @returns {TouchRules}
+ */
+export function touchRules(data) {
+  const block = data.code_touch;
+  return new TouchRules({
+    codeExtensions: new Set(block.code_extensions),
+    editTools: new Set(block.edit_tools),
+    readTools: new Set(block.read_tools),
+    shellTools: new Set(block.shell_tools),
+    pathFields: [...block.path_fields],
+    commandPattern: new RegExp(String.raw`\b(?:${block.test_command_patterns.join("|")})\b`),
+    systemReminderPrefix: block.system_reminder_prefix,
+  });
+}
+
+/**
+ * One transcript classified: its class, the user turn of its first code touch, its label.
+ * `label` is the subagent type for a subagent transcript and `-` for a main session.
+ */
+export class SessionTouch {
+  /**
+   * @param {string} kind
+   * @param {number | null} firstTouchTurn
+   * @param {string} [label]
+   */
+  constructor(kind, firstTouchTurn, label = "-") {
+    this.kind = kind;
+    this.firstTouchTurn = firstTouchTurn;
+    this.label = label;
+    Object.freeze(this);
+  }
+}
+
+/** Every classified main session and subagent transcript found beside the located transcript. */
+export class CodeTouchStats {
+  /**
+   * @param {string} scanned
+   * @param {SessionTouch[]} main
+   * @param {SessionTouch[]} subagents
+   */
+  constructor(scanned, main, subagents) {
+    this.scanned = scanned;
+    this.main = main;
+    this.subagents = subagents;
+    Object.freeze(this);
+  }
+}
+
+/**
+ * A prompt typed by the user: not a tool result, not a meta or system-reminder record.
+ * @param {Record<string, Json>} record
+ * @param {TouchRules} rules
+ * @returns {boolean}
+ */
+function _isUserTurn(record, rules) {
+  if (dictGet(record, "type") !== "user" || truthy(dictGet(record, "isMeta"))) {
+    return false;
+  }
+  const message = dictGet(record, "message");
+  const content = isDict(message) ? dictGet(message, "content") : null;
+  if (typeof content === "string") {
+    return !content.startsWith(rules.systemReminderPrefix);
+  }
+  if (Array.isArray(content)) {
+    const kinds = new Set(content.filter((item) => isDict(item)).map((item) => dictGet(item, "type")));
+    return !kinds.has("tool_result") && kinds.has("text");
+  }
+  return false;
+}
+
+/**
+ * CODE_EDIT or CODE_READ when one tool call touches code, else null.
+ * @param {Record<string, Json>} toolUse
+ * @param {TouchRules} rules
+ * @returns {string | null}
+ */
+function _touchesCode(toolUse, rules) {
+  const name = dictGet(toolUse, "name");
+  const toolInput = dictGet(toolUse, "input");
+  if (typeof name !== "string" || !isDict(toolInput)) {
+    return null;
+  }
+  if (rules.shellTools.has(name)) {
+    const command = dictGet(toolInput, "command");
+    return typeof command === "string" && rules.commandPattern.test(command) ? CODE_READ : null;
+  }
+  if (!rules.editTools.has(name) && !rules.readTools.has(name)) {
+    return null;
+  }
+  const field = rules.pathFields.find((candidate) => truthy(dictGet(toolInput, candidate)));
+  const target = field === undefined ? "" : dictGet(toolInput, field);
+  if (typeof target !== "string" || !rules.codeExtensions.has(pyLower(pySuffix(basename(target))))) {
+    return null;
+  }
+  return rules.editTools.has(name) ? CODE_EDIT : CODE_READ;
+}
+
+/**
+ * The lines that are JSON objects; blank, unparseable and non-object lines are passed over.
+ * @param {Iterable<string>} lines
+ * @returns {Generator<Record<string, Json>>}
+ */
+function* _jsonRecords(lines) {
+  for (const raw of lines) {
+    const record = _record(raw);
+    if (record !== null) {
+      yield record;
+    }
+  }
+}
+
+/**
+ * The `tool_use` items of an assistant record.
+ * @param {Record<string, Json>} record
+ * @returns {Record<string, Json>[]}
+ */
+function _toolUses(record) {
+  const message = dictGet(record, "message");
+  const content = isDict(message) ? dictGet(message, "content") : null;
+  if (dictGet(record, "type") !== "assistant" || !Array.isArray(content)) {
+    return [];
+  }
+  return content.filter(
+    /** @returns {item is Record<string, Json>} */ (item) => isDict(item) && dictGet(item, "type") === "tool_use",
+  );
+}
+
+/**
+ * Classify one transcript; null when it holds no user turn (nothing asked, nothing to measure).
+ *
+ * A code *edit* is an edit tool on a code file; a code *read* is a read tool on a code file or a
+ * shell command running the project's tests, linters or tools. A shell write (heredoc, `sed -i`)
+ * and `Grep`/`Glob` are not counted, so NO_CODE is an upper bound on the sessions that never
+ * touched code. `firstTouchTurn` is how many user turns had been seen at the first edit or read,
+ * whichever came first. The label is the transcript's `attributionAgent`, else `-`.
+ * @param {Iterable<string>} lines
+ * @param {TouchRules} rules
+ * @returns {SessionTouch | null}
+ */
+export function classifySessionLines(lines, rules) {
+  let turns = 0;
+  let edited = false;
+  /** @type {number | null} */ let firstTouchTurn = null;
+  let label = "-";
+  for (const record of _jsonRecords(lines)) {
+    const attribution = dictGet(record, "attributionAgent");
+    if (label === "-" && typeof attribution === "string" && attribution) {
+      label = attribution;
+    }
+    if (_isUserTurn(record, rules)) {
+      turns += 1;
+      continue;
+    }
+    for (const toolUse of _toolUses(record)) {
+      const kind = _touchesCode(toolUse, rules);
+      if (kind === null) {
+        continue;
+      }
+      edited = edited || kind === CODE_EDIT;
+      firstTouchTurn ??= turns;
+    }
+  }
+  if (turns === 0) {
+    return null;
+  }
+  if (edited) {
+    return new SessionTouch(CODE_EDIT, firstTouchTurn, label);
+  }
+  return new SessionTouch(firstTouchTurn === null ? NO_CODE : CODE_READ, firstTouchTurn, label);
+}
+
+/**
+ * Classify one transcript file, decoding what is not UTF-8 leniently.
+ * @param {string} path
+ * @param {TouchRules} rules
+ * @returns {SessionTouch | null}
+ */
+function _classifyFile(path, rules) {
+  return classifySessionLines(pySplitlines(readText(path)), rules);
+}
+
+/**
+ * Classify every session of a transcript directory and every subagent transcript under it.
+ *
+ * Main sessions are the `*.jsonl` files of the directory; subagents are
+ * `<directory>/<session>/subagents/agent-*.jsonl`, labelled by their `.meta.json` `agentType`
+ * (else their `attributionAgent`). Null when the directory is missing.
+ * @param {string} transcriptsDirectory
+ * @param {TouchRules} rules
+ * @returns {CodeTouchStats | null}
+ */
+export function collectCodeTouch(transcriptsDirectory, rules) {
+  if (!isDir(transcriptsDirectory)) {
+    return null;
+  }
+  const entries = fs.readdirSync(transcriptsDirectory).sort(codePointCompare);
+  /** @type {SessionTouch[]} */ const main = [];
+  for (const name of entries.filter((entry) => pySuffix(entry) === ".jsonl")) {
+    const path = pyPath(transcriptsDirectory, name);
+    const touch = isFile(path) ? _classifyFile(path, rules) : null;
+    if (touch !== null) {
+      main.push(touch);
+    }
+  }
+  /** @type {SessionTouch[]} */ const subagents = [];
+  for (const session of entries) {
+    const subagentsDir = pyPath(transcriptsDirectory, session, "subagents");
+    if (!isDir(subagentsDir)) {
+      continue;
+    }
+    const names = fs
+      .readdirSync(subagentsDir)
+      .filter((name) => name.startsWith("agent-") && pySuffix(name) === ".jsonl")
+      .sort(codePointCompare);
+    for (const name of names) {
+      const touch = _classifyFile(pyPath(subagentsDir, name), rules);
+      if (touch === null) {
+        continue;
+      }
+      const meta = _readJsonDict(pyPath(subagentsDir, `${pyStem(name)}.meta.json`));
+      const [label] = labelAndTier(meta, touch.label, new Map());
+      subagents.push(new SessionTouch(touch.kind, touch.firstTouchTurn, label));
+    }
+  }
+  return new CodeTouchStats(transcriptsDirectory, main, subagents);
+}
+
+// --------------------------------------------------------------------------------------
 // Budget — Claude API usage endpoint (opt out with --no-budget)
 // --------------------------------------------------------------------------------------
 
@@ -656,6 +944,153 @@ function _fmtResets(value) {
 }
 
 /**
+ * `count` of `total` as a whole percent, halves rounded up — integer arithmetic, so both twins agree.
+ * @param {number} count
+ * @param {number} total
+ * @returns {number}
+ */
+function _percent(count, total) {
+  return Math.floor((200 * count + total) / (2 * total));
+}
+
+/**
+ * @param {number} count
+ * @param {number} total
+ * @returns {string}
+ */
+function _share(count, total) {
+  return total ? `${_percent(count, total)}%` : "-";
+}
+
+/**
+ * The median of whole numbers, `-` for none; an even count between two odd values ends in `.5`.
+ * @param {number[]} values
+ * @returns {string}
+ */
+function _medianText(values) {
+  const ordered = [...values].sort((a, b) => a - b);
+  if (ordered.length === 0) {
+    return "-";
+  }
+  const middle = Math.floor(ordered.length / 2);
+  if (ordered.length % 2) {
+    return String(ordered[middle]);
+  }
+  const pair = ordered[middle - 1] + ordered[middle];
+  return pair % 2 === 0 ? String(pair / 2) : `${Math.floor(pair / 2)}.5`;
+}
+
+/**
+ * The class counts of one group of transcripts, as the texts the digest and the report print.
+ * @param {SessionTouch[]} touches
+ * @returns {{n: string, edit: string, read: string, none: string, median: string}}
+ */
+function _group(touches) {
+  const total = touches.length;
+  /** @param {string} kind @returns {string} */
+  const counted = (kind) => {
+    const count = touches.filter((touch) => touch.kind === kind).length;
+    return `${count} (${_share(count, total)})`;
+  };
+  const turns = touches.map((touch) => touch.firstTouchTurn).filter((turn) => turn !== null);
+  return {
+    n: String(total),
+    edit: counted(CODE_EDIT),
+    read: counted(CODE_READ),
+    none: counted(NO_CODE),
+    median: _medianText(/** @type {number[]} */ (turns)),
+  };
+}
+
+/**
+ * `[type, transcripts, no-code transcripts]` per subagent type, the largest no-code share first.
+ * @param {SessionTouch[]} subagents
+ * @returns {[string, number, number][]}
+ */
+function _noCodeByType(subagents) {
+  /** @type {Map<string, [number, number]>} */ const counts = new Map();
+  for (const touch of subagents) {
+    const entry = counts.get(touch.label) ?? [0, 0];
+    entry[0] += 1;
+    entry[1] += touch.kind === NO_CODE ? 1 : 0;
+    counts.set(touch.label, entry);
+  }
+  return [...counts.entries()]
+    .map(/** @returns {[string, number, number]} */ ([label, [total, empty]]) => [label, total, empty])
+    .sort((a, b) => _percent(b[2], b[1]) - _percent(a[2], a[1]) || codePointCompare(a[0], b[0]));
+}
+
+/**
+ * The digest's code-touch lines: both groups, the no-code share per subagent type, the limit.
+ * @param {StatsData} data
+ * @param {CodeTouchStats | null} codeTouch
+ * @returns {string[]}
+ */
+function _renderCodeTouchDigest(data, codeTouch) {
+  const texts = data.digest;
+  if (codeTouch === null || (codeTouch.main.length === 0 && codeTouch.subagents.length === 0)) {
+    return [texts.code_touch_none];
+  }
+  /** @type {string[]} */ const lines = [];
+  for (const [name, touches] of [
+    [data.code_touch.group_main, codeTouch.main],
+    [data.code_touch.group_subagents, codeTouch.subagents],
+  ]) {
+    const touched = /** @type {SessionTouch[]} */ (touches);
+    if (touched.length === 0) {
+      lines.push(fill(texts.code_touch_group_empty, { group: String(name) }));
+      continue;
+    }
+    lines.push(fill(texts.code_touch_group, { group: String(name), ..._group(touched) }));
+  }
+  if (codeTouch.subagents.length > 0) {
+    const types = _noCodeByType(codeTouch.subagents)
+      .map(([label, total, empty]) => `${label} ${_share(empty, total)} (n=${total})`)
+      .join(", ");
+    lines.push(fill(texts.code_touch_no_code_by_type, { types }));
+  }
+  lines.push(texts.code_touch_limit);
+  return lines;
+}
+
+/**
+ * The '## Code touch' body: a table per group, a table per subagent type, the definitions.
+ * @param {StatsData} data
+ * @param {CodeTouchStats | null} codeTouch
+ * @returns {string[]}
+ */
+function _renderCodeTouchSection(data, codeTouch) {
+  const texts = data.report;
+  if (codeTouch === null || (codeTouch.main.length === 0 && codeTouch.subagents.length === 0)) {
+    return [texts.code_touch_none];
+  }
+  const lines = [fill(texts.code_touch_scanned, { dir: codeTouch.scanned }), "", ...texts.code_touch_group_header];
+  for (const [name, touches] of [
+    [data.code_touch.group_main, codeTouch.main],
+    [data.code_touch.group_subagents, codeTouch.subagents],
+  ]) {
+    lines.push(
+      fill(texts.code_touch_group_row, { group: String(name), ..._group(/** @type {SessionTouch[]} */ (touches)) }),
+    );
+  }
+  if (codeTouch.subagents.length > 0) {
+    lines.push("", ...texts.code_touch_type_header);
+    for (const [label, total, empty] of _noCodeByType(codeTouch.subagents)) {
+      lines.push(
+        fill(texts.code_touch_type_row, {
+          type: label,
+          n: String(total),
+          none: String(empty),
+          share: _share(empty, total),
+        }),
+      );
+    }
+  }
+  lines.push("", texts.code_touch_note);
+  return lines;
+}
+
+/**
  * Which session a report is about — its stem and the transcript path it was parsed from.
  *
  * The two travel together everywhere a report is rendered: `stem` is only ever derived from
@@ -798,7 +1233,7 @@ function _renderBudgetSection(data, budget) {
 }
 
 /**
- * Full markdown report (file) — delegations, per-role tokens, budget.
+ * Full markdown report (file) — delegations, per-role tokens, code touch, budget.
  * @param {StatsData} data
  * @param {string} delegationLog the delegation log's project-root-relative path (named under "Sources")
  * @param {SessionRef} session
@@ -825,6 +1260,11 @@ export function renderReport(data, delegationLog, session, delegation, transcrip
   lines.push(..._renderTokensSection(data, transcriptStats, subagents));
   lines.push("");
 
+  lines.push(texts.code_touch_heading);
+  lines.push("");
+  lines.push(..._renderCodeTouchSection(data, transcriptStats?.codeTouch ?? null));
+  lines.push("");
+
   lines.push(texts.budget_heading);
   lines.push("");
   lines.push(..._renderBudgetSection(data, budget));
@@ -837,7 +1277,7 @@ export function renderReport(data, delegationLog, session, delegation, transcrip
 }
 
 /**
- * Compact stdout digest (~8-12 lines) — relayed to chat verbatim by the calling skill.
+ * Compact stdout digest (~12-16 lines) — relayed to chat verbatim by the calling skill.
  * @param {StatsData} data
  * @param {DelegationStats | null} delegation
  * @param {TranscriptStats | null} transcriptStats
@@ -888,6 +1328,8 @@ export function renderDigest(data, delegation, transcriptStats, subagents, budge
   } else {
     lines.push(texts.no_subagent_transcripts);
   }
+
+  lines.push(..._renderCodeTouchDigest(data, transcriptStats?.codeTouch ?? null));
 
   if (budget.unavailable) {
     lines.push(fill(texts.budget_unavailable, { reason: budget.unavailable }));
@@ -1000,6 +1442,10 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
       pyPath(dirname(transcriptPath), sessionStem, "subagents"),
       agentTierMap(agents),
     );
+  }
+
+  if (transcriptStats !== null && transcriptPath !== null) {
+    transcriptStats.codeTouch = collectCodeTouch(dirname(transcriptPath), touchRules(data));
   }
 
   const budget = options.noBudget

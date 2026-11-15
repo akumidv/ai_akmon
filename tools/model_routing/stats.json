@@ -7,6 +7,52 @@
     "week_all_models": "week (all models)",
     "week_scoped": "week ({{model}})"
   },
+  "code_touch": {
+    "code_extensions": [
+      ".py",
+      ".mjs",
+      ".js",
+      ".ts",
+      ".tsx",
+      ".cjs",
+      ".sh",
+      ".jsx",
+      ".mts",
+      ".cts"
+    ],
+    "edit_tools": [
+      "Edit",
+      "Write",
+      "MultiEdit",
+      "NotebookEdit"
+    ],
+    "read_tools": [
+      "Read"
+    ],
+    "shell_tools": [
+      "Bash"
+    ],
+    "path_fields": [
+      "file_path",
+      "notebook_path"
+    ],
+    "test_command_patterns": [
+      "pytest",
+      "ruff",
+      "node --test",
+      "tsc",
+      "oxlint",
+      "oxfmt",
+      "uv run",
+      "uv build",
+      "npx",
+      "self_ci",
+      "akmon check"
+    ],
+    "system_reminder_prefix": "<system-reminder>",
+    "group_main": "main sessions",
+    "group_subagents": "subagents"
+  },
   "digest": {
     "no_delegations_logged": "delegations: no delegations logged",
     "no_delegations_recorded": "delegations: none recorded",
@@ -15,6 +61,11 @@
     "orchestrator_tokens": "orchestrator tokens: in={{input}} out={{output}} cache-read={{cache_read}}",
     "subagent_tokens": "subagent tokens (n={{n}}): in={{input}} out={{output}} cache-read={{cache_read}}",
     "no_subagent_transcripts": "subagent tokens: no subagent transcripts",
+    "code_touch_none": "code touch: no session transcript with a user turn",
+    "code_touch_group": "code touch, {{group}} (n={{n}}): code-edit {{edit}}, code-read {{read}}, no-code {{none}}; median first touch at user turn {{median}}",
+    "code_touch_group_empty": "code touch, {{group}}: no transcript with a user turn",
+    "code_touch_no_code_by_type": "code touch, no-code share by subagent type: {{types}}",
+    "code_touch_limit": "code touch: a Bash write (heredoc, sed -i) and Grep/Glob are not counted, so a no-code share is an upper bound",
     "budget_unavailable": "budget: unavailable ({{reason}})",
     "budget_session_week": "budget: session {{session_remaining}} remaining (resets {{session_resets}}), week {{week_remaining}} remaining (resets {{week_resets}})",
     "budget_scoped": "budget: {{label}} {{remaining}} remaining (resets {{resets}})",
@@ -26,6 +77,20 @@
     "transcript_not_found": "Transcript: not found",
     "delegations_heading": "## Delegations",
     "tokens_heading": "## Tokens",
+    "code_touch_heading": "## Code touch",
+    "code_touch_scanned": "Sessions scanned in `{{dir}}`; a session or subagent transcript with no user turn is left out.",
+    "code_touch_none": "no session transcript with a user turn",
+    "code_touch_group_header": [
+      "| group | n | code-edit | code-read | no-code | median first touch (user turn) |",
+      "|---|---|---|---|---|---|"
+    ],
+    "code_touch_group_row": "| {{group}} | {{n}} | {{edit}} | {{read}} | {{none}} | {{median}} |",
+    "code_touch_type_header": [
+      "| subagent type | n | no-code | no-code share |",
+      "|---|---|---|---|"
+    ],
+    "code_touch_type_row": "| {{type}} | {{n}} | {{none}} | {{share}} |",
+    "code_touch_note": "code-edit: an Edit, Write, MultiEdit or NotebookEdit on a code file; code-read: no code edit, but a Read of a code file or a Bash command running the project's tests, linters or tools; no-code: neither. First touch: the user turn at which the first code edit or read happened. Limit: a Bash write (heredoc, `sed -i`) and Grep/Glob are not counted, so no-code is an upper bound.",
     "budget_heading": "## Budget",
     "separator": "---",
     "delegations_none": "no delegations logged",

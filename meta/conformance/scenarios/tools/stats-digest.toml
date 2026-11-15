@@ -29,4 +29,4 @@ argv = [
 [expected]
 exit = 0
 stderr = ""
-stdout = "delegations: 2 total (k_explorer=1, k_mechanic=1)\norchestrator tokens: in=1300 out=300 cache-read=55\nsubagent tokens (n=1): in=400 out=80 cache-read=0\nbudget: unavailable (skipped (--no-budget))\nreport: .claude/stats/stats-1.md\n"
+stdout = "delegations: 2 total (k_explorer=1, k_mechanic=1)\norchestrator tokens: in=1300 out=300 cache-read=55\nsubagent tokens (n=1): in=400 out=80 cache-read=0\ncode touch, main sessions (n=1): code-edit 0 (0%), code-read 0 (0%), no-code 1 (100%); median first touch at user turn -\ncode touch, subagents: no transcript with a user turn\ncode touch: a Bash write (heredoc, sed -i) and Grep/Glob are not counted, so a no-code share is an upper bound\nbudget: unavailable (skipped (--no-budget))\nreport: .claude/stats/stats-1.md\n"

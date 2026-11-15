@@ -1,0 +1,36 @@
+id = "tools/stats-code-touch"
+ecosystem = "shared"
+kind = "tool"
+covers = ["tool:model_routing/stats"]
+
+# The code-touch lines of the digest (A49): the sessions beside the located transcript are
+# classified as code-edit (an edit tool on a code file), code-read (a Read of a code file or a
+# test/lint command) or no-code, the first touch is the user turn at which it happened, and the
+# no-code share is reported per subagent type. main.jsonl edits a code file at its second user
+# turn, other.jsonl never touches code; three subagents are one no-code (a Grep), one
+# code-edit, one code-read. A Grep/Glob and a Bash write are not counted, which the digest says.
+
+[fixture.files]
+".claude/transcripts/main.jsonl" = "{\"type\": \"user\", \"message\": {\"content\": \"first\"}}\n{\"type\": \"assistant\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"Read\", \"input\": {\"file_path\": \"/p/docs/a.md\"}}]}}\n{\"type\": \"user\", \"message\": {\"content\": \"second\"}}\n{\"type\": \"assistant\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"Edit\", \"input\": {\"file_path\": \"/p/tools/a.py\"}}]}}\n"
+".claude/transcripts/other.jsonl" = "{\"type\": \"user\", \"message\": {\"content\": \"only a question\"}}\n"
+".claude/transcripts/main/subagents/agent-a1.jsonl" = "{\"type\": \"user\", \"message\": {\"content\": \"search\"}}\n{\"type\": \"assistant\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"Grep\", \"input\": {\"pattern\": \"x\"}}]}}\n"
+".claude/transcripts/main/subagents/agent-a1.meta.json" = "{\"agentType\": \"k_explorer\"}"
+".claude/transcripts/main/subagents/agent-a2.jsonl" = "{\"type\": \"user\", \"message\": {\"content\": \"implement\"}}\n{\"type\": \"assistant\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"Write\", \"input\": {\"file_path\": \"/p/js/b.mjs\"}}]}}\n"
+".claude/transcripts/main/subagents/agent-a2.meta.json" = "{\"agentType\": \"k_implementer\"}"
+".claude/transcripts/other/subagents/agent-a3.jsonl" = "{\"type\": \"user\", \"message\": {\"content\": \"run\"}}\n{\"type\": \"assistant\", \"message\": {\"content\": [{\"type\": \"tool_use\", \"name\": \"Bash\", \"input\": {\"command\": \"uv run pytest -q\"}}]}}\n"
+".claude/transcripts/other/subagents/agent-a3.meta.json" = "{\"agentType\": \"k_explorer\"}"
+
+[run]
+tool = "model_routing/stats"
+argv = [
+  "--transcript",
+  ".claude/transcripts/main.jsonl",
+  "--no-budget",
+  "--report-dir",
+  ".claude/stats",
+]
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "delegations: no delegations logged\norchestrator tokens: in=0 out=0 cache-read=0\nsubagent tokens (n=2): in=0 out=0 cache-read=0\ncode touch, main sessions (n=2): code-edit 1 (50%), code-read 0 (0%), no-code 1 (50%); median first touch at user turn 2\ncode touch, subagents (n=3): code-edit 1 (33%), code-read 1 (33%), no-code 1 (33%); median first touch at user turn 1\ncode touch, no-code share by subagent type: k_explorer 50% (n=2), k_implementer 0% (n=1)\ncode touch: a Bash write (heredoc, sed -i) and Grep/Glob are not counted, so a no-code share is an upper bound\nbudget: unavailable (skipped (--no-budget))\nreport: .claude/stats/stats-1.md\n"

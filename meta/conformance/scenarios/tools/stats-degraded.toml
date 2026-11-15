@@ -20,4 +20,4 @@ argv = [
 [expected]
 exit = 0
 stderr = ""
-stdout = "delegations: no delegations logged\norchestrator tokens: transcript unavailable\nsubagent tokens: no subagent transcripts\nbudget: unavailable (skipped (--no-budget))\nreport: .claude/stats/stats-1.md\n"
+stdout = "delegations: no delegations logged\norchestrator tokens: transcript unavailable\nsubagent tokens: no subagent transcripts\ncode touch: no session transcript with a user turn\nbudget: unavailable (skipped (--no-budget))\nreport: .claude/stats/stats-1.md\n"

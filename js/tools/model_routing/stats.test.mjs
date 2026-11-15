@@ -14,11 +14,18 @@ import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { read } from "../../common/jsondata.mjs";
 import {
   BudgetSummary,
+  CODE_EDIT,
+  CODE_READ,
+  NO_CODE,
   SessionRef,
+  SessionTouch,
+  TranscriptStats,
   aggregateDelegationLines,
   aggregateSubagentLines,
   aggregateTranscriptLines,
   budgetSummary,
+  classifySessionLines,
+  collectCodeTouch,
   collectSubagentStats,
   labelAndTier,
   main,
@@ -29,6 +36,7 @@ import {
   readAccessToken,
   renderDigest,
   renderReport,
+  touchRules,
   transcriptsDir,
   usageFromMessage,
 } from "./stats.mjs";
@@ -257,6 +265,7 @@ test("renderDigest and renderReport over a full set of data", () => {
       "delegations: 2 total (k_a=1, k_b=1)",
       "orchestrator tokens: in=10 out=2 cache-read=1",
       "subagent tokens: no subagent transcripts",
+      "code touch: no session transcript with a user turn",
       "budget: session 60.0% remaining (resets r1), week 94.5% remaining (resets -)",
       "report: .claude/stats/r.md",
     ].join("\n"),
@@ -309,7 +318,7 @@ test("main: with every source absent, each section degrades and the exit is 0", 
   assert.equal(result.code, 0);
   assert.match(
     result.stdout,
-    /^delegations: no delegations logged\norchestrator tokens: transcript unavailable\nsubagent tokens: no subagent transcripts\nbudget: unavailable \(skipped \(--no-budget\)\)\nreport: .*\/out\/stats-1\.md\n$/,
+    /^delegations: no delegations logged\norchestrator tokens: transcript unavailable\nsubagent tokens: no subagent transcripts\ncode touch: no session transcript with a user turn\nbudget: unavailable \(skipped \(--no-budget\)\)\nreport: .*\/out\/stats-1\.md\n$/,
   );
   assert.deepEqual(fs.readdirSync(path.join(root, "out")), ["stats-1.md"]);
   assert.match(fs.readFileSync(path.join(root, "out", "stats-1.md"), "utf8"), /^# Session statistics — absent\n/);
@@ -334,4 +343,234 @@ test("main: the budget goes through the injected fetch, credentials from HOME", 
   } finally {
     process.env.HOME = saved;
   }
+});
+
+// ---- A49: code touch — which sessions needed code at all ----
+
+const rules = touchRules(DATA);
+
+const prompt = (/** @type {string} */ text = "do it") => JSON.stringify({ type: "user", message: { content: text } });
+const toolUse = (/** @type {string} */ name, /** @type {object} */ input) =>
+  JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name, input }] } });
+const toolResult = () =>
+  JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", content: "ok" }] } });
+
+/**
+ * A main-session aggregate carrying a code-touch scan, as `main` makes it.
+ * @param {import("./stats.mjs").CodeTouchStats | null} codeTouch
+ * @returns {TranscriptStats}
+ */
+function scanned(codeTouch) {
+  const stats = new TranscriptStats();
+  stats.codeTouch = codeTouch;
+  return stats;
+}
+
+/**
+ * @param {string} file
+ * @param {string[]} lines
+ */
+function writeLines(file, lines) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${lines.join("\n")}\n`);
+}
+
+/** @param {string} root */
+function codeTouchFixture(root) {
+  writeLines(path.join(root, "a.jsonl"), [prompt(), toolUse("Edit", { file_path: "/p/a.py" })]);
+  writeLines(path.join(root, "b.jsonl"), [prompt(), toolUse("Read", { file_path: "/p/b.js" })]);
+  writeLines(path.join(root, "c.jsonl"), [prompt()]);
+  writeLines(path.join(root, "d.jsonl"), [toolUse("Edit", { file_path: "/p/a.py" })]); // no user turn: left out
+  const one = path.join(root, "a", "subagents");
+  writeLines(path.join(one, "agent-1.jsonl"), [prompt(), toolUse("Write", { file_path: "/p/n.ts" })]);
+  fs.writeFileSync(path.join(one, "agent-1.meta.json"), '{"agentType": "k_implementer"}');
+  writeLines(path.join(one, "agent-2.jsonl"), [prompt()]);
+  fs.writeFileSync(path.join(one, "agent-2.meta.json"), '{"agentType": "k_explorer"}');
+  writeLines(path.join(root, "b", "subagents", "agent-3.jsonl"), [
+    JSON.stringify({ type: "user", attributionAgent: "k_explorer", message: { content: "go" } }),
+  ]);
+}
+
+test("classifySessionLines: no user turn is not classified; reminders, meta and tool results are not turns", () => {
+  assert.equal(classifySessionLines([toolUse("Edit", { file_path: "/p/a.py" }), toolResult()], rules), null);
+  const lines = [
+    prompt("<system-reminder>context</system-reminder>"),
+    JSON.stringify({ type: "user", isMeta: true, message: { content: "meta" } }),
+    toolResult(),
+    JSON.stringify({ type: "user", message: { content: [{ type: "text", text: "typed" }] } }),
+  ];
+  assert.deepEqual({ ...classifySessionLines(lines, rules) }, { ...new SessionTouch(NO_CODE, null) });
+});
+
+test("classifySessionLines: an edit of a code file is code-edit, with the turn of the first touch", () => {
+  const lines = [
+    prompt(),
+    toolUse("Read", { file_path: "/p/docs/a.md" }),
+    prompt("again"),
+    toolUse("Read", { file_path: "/p/a.py" }),
+    prompt("and again"),
+    toolUse("Write", { file_path: "/p/b.mjs" }),
+  ];
+  assert.deepEqual({ ...classifySessionLines(lines, rules) }, { ...new SessionTouch(CODE_EDIT, 2) });
+});
+
+test("classifySessionLines: notebook_path is read, a config or notebook file is no touch", () => {
+  const kind = (/** @type {string} */ name, /** @type {object} */ input) =>
+    classifySessionLines([prompt(), toolUse(name, input)], rules)?.kind;
+  assert.equal(kind("Edit", { file_path: "/p/c.toml" }), NO_CODE);
+  assert.equal(kind("NotebookEdit", { notebook_path: "/p/n.ipynb" }), NO_CODE);
+  assert.equal(kind("NotebookEdit", { notebook_path: "/p/n.py" }), CODE_EDIT);
+});
+
+test("classifySessionLines: a read of a code file or a test command is code-read", () => {
+  const read = classifySessionLines([prompt(), toolUse("Read", { file_path: "/p/A.PY" })], rules);
+  assert.deepEqual({ ...read }, { ...new SessionTouch(CODE_READ, 1) });
+  const ran = classifySessionLines([prompt(), prompt(), toolUse("Bash", { command: "uv run pytest -q" })], rules);
+  assert.deepEqual({ ...ran }, { ...new SessionTouch(CODE_READ, 2) });
+  const none = classifySessionLines(
+    [prompt(), toolUse("Bash", { command: "git log --oneline" }), toolUse("Bash", { command: "echo subtsc" })],
+    rules,
+  );
+  assert.equal(none?.kind, NO_CODE);
+});
+
+test("classifySessionLines: a Bash write and a search are not counted (the stated limit)", () => {
+  const lines = [
+    prompt(),
+    toolUse("Bash", { command: "cat > tools/a.py <<'EOF'\nx = 1\nEOF" }),
+    toolUse("Grep", { pattern: "x", path: "tools" }),
+    toolUse("Glob", { pattern: "**/*.py" }),
+  ];
+  assert.equal(classifySessionLines(lines, rules)?.kind, NO_CODE);
+});
+
+test("classifySessionLines: junk lines are passed over; the label is the attribution agent", () => {
+  const junk = ["", "not json", "[1]", JSON.stringify({ type: "assistant", message: { content: "text" } }), prompt()];
+  assert.deepEqual({ ...classifySessionLines(junk, rules) }, { ...new SessionTouch(NO_CODE, null) });
+  const labelled = JSON.stringify({ type: "user", attributionAgent: "k_explorer", message: { content: "go" } });
+  assert.equal(classifySessionLines([labelled], rules)?.label, "k_explorer");
+});
+
+test("collectCodeTouch: null for a missing directory; main sessions and labelled subagents otherwise", () => {
+  const root = scratch();
+  assert.equal(collectCodeTouch(path.join(root, "absent"), rules), null);
+  codeTouchFixture(root);
+  const result = collectCodeTouch(root, rules);
+  assert.equal(result?.scanned, root);
+  assert.deepEqual(
+    result?.main.map((touch) => touch.kind),
+    [CODE_EDIT, CODE_READ, NO_CODE],
+  );
+  assert.deepEqual(
+    result?.subagents.map((touch) => [touch.label, touch.kind]),
+    [
+      ["k_implementer", CODE_EDIT],
+      ["k_explorer", NO_CODE],
+      ["k_explorer", NO_CODE],
+    ],
+  );
+});
+
+test("the digest reports both groups, the type shares and the limit; the report has the tables", () => {
+  const root = scratch();
+  codeTouchFixture(root);
+  const codeTouch = collectCodeTouch(root, rules);
+  const digest = renderDigest(DATA, null, scanned(codeTouch), [], new BudgetSummary(), "r.md").split("\n");
+  assert.ok(
+    digest.includes(
+      "code touch, main sessions (n=3): code-edit 1 (33%), code-read 1 (33%), no-code 1 (33%); median first touch at user turn 1",
+    ),
+  );
+  assert.ok(
+    digest.includes(
+      "code touch, subagents (n=3): code-edit 1 (33%), code-read 0 (0%), no-code 2 (67%); median first touch at user turn 1",
+    ),
+  );
+  assert.ok(
+    digest.includes("code touch, no-code share by subagent type: k_explorer 100% (n=2), k_implementer 0% (n=1)"),
+  );
+  assert.ok(digest.some((line) => line.startsWith("code touch: a Bash write")));
+  const report = renderReport(
+    DATA,
+    "log",
+    new SessionRef("main", "a.jsonl"),
+    null,
+    scanned(codeTouch),
+    [],
+    new BudgetSummary(),
+  );
+  assert.ok(report.includes("| main sessions | 3 | 1 (33%) | 1 (33%) | 1 (33%) | 1 |"));
+  assert.ok(report.includes("| subagents | 3 | 1 (33%) | 0 (0%) | 2 (67%) | 1 |"));
+  assert.ok(report.includes("| k_explorer | 2 | 2 | 100% |"));
+  assert.ok(report.includes("upper bound"));
+  assert.ok(report.indexOf("## Tokens") < report.indexOf("## Code touch"));
+  assert.ok(report.indexOf("## Code touch") < report.indexOf("## Budget"));
+});
+
+test("the digest with no session says so once; an empty group is named", () => {
+  const root = scratch();
+  for (const codeTouch of [null, collectCodeTouch(root, rules)]) {
+    const lines = renderDigest(DATA, null, scanned(codeTouch), [], new BudgetSummary(), "r.md").split("\n");
+    assert.ok(lines.includes("code touch: no session transcript with a user turn"));
+    assert.ok(!lines.some((line) => line.startsWith("code touch,")));
+  }
+  writeLines(path.join(root, "a.jsonl"), [prompt()]);
+  const lines = renderDigest(DATA, null, scanned(collectCodeTouch(root, rules)), [], new BudgetSummary(), "r.md").split(
+    "\n",
+  );
+  assert.ok(lines.includes("code touch, subagents: no transcript with a user turn"));
+  assert.ok(!lines.some((line) => line.includes("by subagent type")));
+});
+
+test("main: the code-touch scan covers the directory of the located transcript", async () => {
+  const root = scratch();
+  const sessions = path.join(root, "sessions");
+  codeTouchFixture(sessions);
+  const result = await run([
+    "--project-root",
+    root,
+    "--transcript",
+    path.join(sessions, "a.jsonl"),
+    "--no-budget",
+    "--report-dir",
+    path.join(root, "out"),
+  ]);
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /\ncode touch, main sessions \(n=3\)/);
+});
+
+test("the median is whole for an odd count and half steps for an even one", () => {
+  const touches = (/** @type {number[]} */ turns) => turns.map((turn) => new SessionTouch(CODE_READ, turn));
+  const median = (/** @type {number[]} */ turns) =>
+    renderDigest(
+      DATA,
+      null,
+      scanned({ scanned: "d", main: touches(turns), subagents: [] }),
+      [],
+      new BudgetSummary(),
+      "r.md",
+    ).match(/median first touch at user turn (\S+)/)?.[1];
+  assert.equal(median([3, 1, 2]), "2");
+  assert.equal(median([1, 3]), "2");
+  assert.equal(median([1, 2]), "1.5");
+});
+
+test("a share rounds halves up in integer arithmetic", () => {
+  const share = (/** @type {number} */ count) =>
+    renderDigest(
+      DATA,
+      null,
+      scanned({
+        scanned: "d",
+        main: [
+          ...Array.from({ length: count }, () => new SessionTouch(CODE_EDIT, 1)),
+          ...Array.from({ length: 8 - count }, () => new SessionTouch(NO_CODE, null)),
+        ],
+        subagents: [],
+      }),
+      [],
+      new BudgetSummary(),
+      "r.md",
+    ).match(/code-edit \d+ \((\d+)%\)/)?.[1];
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7, 8].map(share), ["0", "13", "25", "38", "50", "63", "75", "88", "100"]);
 });
