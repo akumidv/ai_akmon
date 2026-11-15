@@ -119,6 +119,35 @@ test("a final version needs its heading topmost, in either heading spelling", ()
   assert.equal(brief(checkReleaseVersions(DATA, pre, "package"))[0], "error release.changelog-window");
 });
 
+test("a final version with an entry left under Unreleased is an error, however the section sits", () => {
+  const entries = tree({
+    "pyproject.toml": pyproject("1.2.3"),
+    "CHANGELOG.md": "## Unreleased\n\n- an entry\n\n## v1.2.3\n",
+  });
+  const [found] = checkReleaseVersions(DATA, entries, "package");
+  assert.equal(`${found.severity} ${found.code}`, "error release.changelog-window");
+  assert.match(found.message, /still holds 1 entry line/);
+  assert.match(found.fix, /`## v1\.2\.3`/);
+  const below = tree({
+    "pyproject.toml": pyproject("1.2.3"),
+    "CHANGELOG.md": "## v1.2.3\n\n- shipped\n\n## Unreleased\n\n### Added\n\n- late entry\n",
+  });
+  assert.equal(brief(checkReleaseVersions(DATA, below, "package"))[0], "error release.changelog-window");
+});
+
+test("a final version with only empty subheadings under Unreleased is ok; non-final is never checked", () => {
+  const skeleton = tree({
+    "pyproject.toml": pyproject("1.2.3"),
+    "CHANGELOG.md": "## Unreleased\n\n### Added\n\n### Fixed\n\n\n## v1.2.3\n",
+  });
+  assert.equal(brief(checkReleaseVersions(DATA, skeleton, "package"))[0], "ok release.changelog-window");
+  const nonFinal = tree({
+    "pyproject.toml": pyproject("1.3.0.dev0"),
+    "CHANGELOG.md": "## Unreleased\n\n- an entry\n\n## v1.2.3\n",
+  });
+  assert.equal(brief(checkReleaseVersions(DATA, nonFinal, "package"))[0], "ok release.changelog-window");
+});
+
 test("no version source and a missing changelog are skip findings, never silence", () => {
   const none = checkReleaseVersions(DATA, tree({}), "package");
   assert.equal(brief(none)[0], "warn release.check-skipped");

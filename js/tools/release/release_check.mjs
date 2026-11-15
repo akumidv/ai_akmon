@@ -107,6 +107,8 @@ const SECTION_HEADING_RE = new RegExp(`${LINE_START}##\\s+([^\\n]+)${LINE_END}`,
 // A released heading names its version *first* and may say more after it (see the Python for why).
 const HEADING_VERSION_RE = /^\[?v?(\d+\.\d+\.\d+)\]?(?:[^\p{L}\p{N}_.+-]|$)/u;
 const UNRELEASED_HEADING_RE = /^\[?unreleased\]?$/i;
+// A heading of level one or two closes a changelog section; `###` and deeper sit inside one.
+const SECTION_BOUNDARY_RE = /^#{1,2}\s+(.+?)\s*$/;
 const TAG_SHAPE_RE = /^v?\d+\.\d+\.\d+$/;
 
 /**
@@ -388,15 +390,47 @@ function _packageJsonVersion(path) {
 }
 
 /**
- * Every `## ` heading, in file order — the changelog window as a reader meets it.
+ * The changelog's text, or an empty string when the file is absent.
  * @param {string} path
+ * @returns {string}
+ */
+function _changelogText(path) {
+  return isFile(path) ? readText(path) : "";
+}
+
+/**
+ * Every `## ` heading, in file order — the changelog window as a reader meets it.
+ * @param {string} text
  * @returns {string[]}
  */
-function _changelogHeadings(path) {
-  if (!isFile(path)) {
-    return [];
+function _changelogHeadings(text) {
+  return [...text.matchAll(HEADING_RE)].map((match) => pyStrip(match[1]));
+}
+
+/**
+ * The entry lines under every `## Unreleased` heading, in file order.
+ *
+ * An entry line is any non-blank line that is not itself a heading: an empty `### Added`
+ * left behind is a skeleton, not an entry. A section ends at the next heading of level one
+ * or two.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function _unreleasedEntries(text) {
+  /** @type {string[]} */
+  const entries = [];
+  let inside = false;
+  for (const line of pySplitlines(text)) {
+    const heading = SECTION_BOUNDARY_RE.exec(line);
+    if (heading) {
+      inside = UNRELEASED_HEADING_RE.test(pyStrip(heading[1]));
+      continue;
+    }
+    if (inside && pyStrip(line) !== "" && !pyLstrip(line).startsWith("#")) {
+      entries.push(pyStrip(line));
+    }
   }
-  return [...readText(path).matchAll(HEADING_RE)].map((match) => pyStrip(match[1]));
+  return entries;
 }
 
 /**
@@ -455,8 +489,9 @@ export function checkReleaseVersions(data, root, subject = "package") {
   const staticFile = staticVersionFile(data);
   const texts = data.findings;
   const changelogPath = pyPath(root, changelog);
-  // Read once: two rules ask about the same headings.
-  const headings = _changelogHeadings(changelogPath);
+  // Read once: three rules ask about the same text.
+  const changelogText = _changelogText(changelogPath);
+  const headings = _changelogHeadings(changelogText);
 
   const declared = _pyprojectVersion(pyPath(root, pyproject));
   const fallback = _staticVersion(pyPath(root, staticFile));
@@ -560,7 +595,7 @@ export function checkReleaseVersions(data, root, subject = "package") {
       ),
     );
   } else {
-    findings.push(..._checkWindow(data, version, headings));
+    findings.push(..._checkWindow(data, version, headings, _unreleasedEntries(changelogText)));
   }
 
   findings.push(..._checkTags(data, root, version, isFile(changelogPath), headings));
@@ -585,13 +620,15 @@ function _releasedHeadings(headings) {
 }
 
 /**
- * The changelog window rule, in its two branches.
+ * The changelog window rule, in its two branches: final also wants no entry left under
+ * `## Unreleased`.
  * @param {ReleaseData} data
  * @param {string} version
  * @param {string[]} headings
+ * @param {string[]} unreleasedEntries
  * @returns {Finding[]}
  */
-function _checkWindow(data, version, headings) {
+function _checkWindow(data, version, headings, unreleasedEntries) {
   const changelog = changelogName(data);
   const texts = data.findings;
   const { base } = splitVersion(version);
@@ -643,6 +680,21 @@ function _checkWindow(data, version, headings) {
         fill(texts["window-final-topmost-mismatch"].message, { version, topmost }),
         changelog,
         fill(texts["window-final-topmost-mismatch"].fix, { base, topmost }),
+      ),
+    ];
+  }
+  if (unreleasedEntries.length > 0) {
+    return [
+      _finding(
+        "error",
+        "release.changelog-window",
+        fill(texts["window-final-unreleased-entries"].message, {
+          version,
+          count: String(unreleasedEntries.length),
+          first: unreleasedEntries[0],
+        }),
+        changelog,
+        fill(texts["window-final-unreleased-entries"].fix, { topmost }),
       ),
     ];
   }

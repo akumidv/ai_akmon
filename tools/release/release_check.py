@@ -252,6 +252,8 @@ _HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 # version mentioned mid-heading (`## Fixed in 1.2.3`) describes a release, it does not name one.
 _HEADING_VERSION_RE = re.compile(r"^\[?v?(\d+\.\d+\.\d+)\]?(?:[^\w.+-]|$)")
 _UNRELEASED_HEADING_RE = re.compile(r"^\[?unreleased\]?$", re.IGNORECASE)
+# A heading of level one or two closes a changelog section; `###` and deeper sit inside one.
+_SECTION_BOUNDARY_RE = re.compile(r"^#{1,2}\s+(.+?)\s*$")
 _PYPROJECT_VERSION_RE = re.compile(r"^version\s*=\s*[\"\']([^\"\']+)[\"\']")
 _SECTION_RE = re.compile(r"^\[([^\]]+)\]\s*$")
 # What *could* be a release tag: a version-shaped name in either spelling. Only `vX.Y.Z` is an
@@ -322,11 +324,35 @@ def _package_json_version(path: Path) -> str | None:
     return version if isinstance(version, str) and version.strip() else None
 
 
-def _changelog_headings(path: Path) -> list[str]:
-    """Every ``## `` heading, in file order — the changelog window as a reader meets it."""
+def _changelog_text(path: Path) -> str:
+    """The changelog's text, or an empty string when the file is absent."""
     if not path.is_file():
-        return []
-    return [match.group(1).strip() for match in _HEADING_RE.finditer(path.read_text(encoding="utf-8"))]
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def _changelog_headings(text: str) -> list[str]:
+    """Every ``## `` heading, in file order — the changelog window as a reader meets it."""
+    return [match.group(1).strip() for match in _HEADING_RE.finditer(text)]
+
+
+def _unreleased_entries(text: str) -> list[str]:
+    """The entry lines under every ``## Unreleased`` heading, in file order.
+
+    An entry line is any non-blank line that is not itself a heading: an empty ``### Added``
+    left behind is a skeleton, not an entry. A section ends at the next heading of level one
+    or two.
+    """
+    entries: list[str] = []
+    inside = False
+    for line in text.splitlines():
+        heading = _SECTION_BOUNDARY_RE.match(line)
+        if heading:
+            inside = bool(_UNRELEASED_HEADING_RE.match(heading.group(1).strip()))
+            continue
+        if inside and line.strip() and not line.lstrip().startswith("#"):
+            entries.append(line.strip())
+    return entries
 
 
 def _git_tags(root: Path) -> list[str] | None:
@@ -378,9 +404,10 @@ def check_release_versions(root: Path, subject: str = "package") -> list[Finding
     changelog, pyproject, static_file = changelog_name(), pyproject_name(), static_version_file()
     findings_data = _release_data()["findings"]
     changelog_path = root / changelog
-    # Read once: two rules ask about the same headings, and a file re-read between them could
+    # Read once: three rules ask about the same text, and a file re-read between them could
     # answer them from two different files.
-    headings = _changelog_headings(changelog_path)
+    changelog_text = _changelog_text(changelog_path)
+    headings = _changelog_headings(changelog_text)
 
     declared = _pyproject_version(root / pyproject)
     fallback = _static_version(root / static_file)
@@ -507,7 +534,7 @@ def check_release_versions(root: Path, subject: str = "package") -> list[Finding
             )
         )
     else:
-        findings.extend(_check_window(version, headings))
+        findings.extend(_check_window(version, headings, _unreleased_entries(changelog_text)))
 
     findings.extend(_check_tags(root, version, has_changelog=changelog_path.is_file(), headings=headings))
     return findings
@@ -527,11 +554,12 @@ def _released_headings(headings: list[str]) -> list[tuple[str, str]]:
     return pairs
 
 
-def _check_window(version: str, headings: list[str]) -> list[Finding]:
+def _check_window(version: str, headings: list[str], unreleased_entries: list[str]) -> list[Finding]:
     """The changelog window rule, in its two branches.
 
     Non-final wants ``## Unreleased``; final wants its own released heading above every
-    other released one.
+    other released one, and no entry left under ``## Unreleased`` — an entry there is a change
+    the released window does not describe.
     """
     changelog = changelog_name()
     texts = _release_data()["findings"]
@@ -587,6 +615,19 @@ def _check_window(version: str, headings: list[str]) -> list[Finding]:
                 ),
                 changelog,
                 jsondata.fill(texts["window-final-topmost-mismatch"]["fix"], {"base": base, "topmost": topmost}),
+            )
+        ]
+    if unreleased_entries:
+        return [
+            _finding(
+                "error",
+                "release.changelog-window",
+                jsondata.fill(
+                    texts["window-final-unreleased-entries"]["message"],
+                    {"version": version, "count": str(len(unreleased_entries)), "first": unreleased_entries[0]},
+                ),
+                changelog,
+                jsondata.fill(texts["window-final-unreleased-entries"]["fix"], {"topmost": topmost}),
             )
         ]
     return [

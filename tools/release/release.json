@@ -86,6 +86,10 @@
       "message": "final version {{version}} but the topmost released heading is `## {{topmost}}`",
       "fix": "Cut a `## v{{base}}` heading above `## {{topmost}}` before tagging."
     },
+    "window-final-unreleased-entries": {
+      "message": "final version {{version}} but `## Unreleased` still holds {{count}} entry line(s), the first `{{first}}`",
+      "fix": "Move the entries under `## {{topmost}}`, the version's heading, and leave `## Unreleased` empty or remove it."
+    },
     "window-final-ok": {
       "message": "final version {{version}} matches the topmost released heading `## {{topmost}}`",
       "fix": "Keep the topmost released heading equal to the version being built."

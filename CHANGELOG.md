@@ -203,6 +203,10 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   `learning/` charters by re-running `akmon init`.
 
 ### Changed
+- **A final release requires an empty `## Unreleased` (C138).** `release_check --check` (both the
+  Python tool and its JS twin) now reports `error release.changelog-window` when the version is final
+  and any `## Unreleased` section still holds an entry line; empty `### Added`-style subheadings are
+  not entries. Check: before tagging a final version, move the entries under its `## vX.Y.Z` heading.
 - **The session-start context is trimmed and de-duplicated, and the code rules have their own file (A49).**
   Consumer-visible: `rules/code.md` — reuse, code design, API shape and don't-duplicate, moved verbatim
   out of `guardrails/_common.md` — is the fourth file of the managed imports region, so `akmon sync`

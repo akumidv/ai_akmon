@@ -207,6 +207,51 @@ def test_a_final_version_below_a_different_topmost_released_heading_fails(tmp_pa
     assert "`## v0.5.0`" in findings[-1].message
 
 
+# --- the final branch: `## Unreleased` must hold no entry (C138) ------------------------
+
+
+def _window(findings) -> list:
+    return [finding for finding in findings if finding.code == "release.changelog-window"]
+
+
+def test_a_final_version_with_entries_left_under_unreleased_fails(tmp_path, monkeypatch):
+    _tree(
+        tmp_path,
+        version="0.4.0",
+        static="0.4.0",
+        changelog="## Unreleased\n\n### Fixed\n- a late fix\n- another\n\n## v0.4.0\n\n- shipped\n",
+    )
+    (window,) = _window(_check(tmp_path, monkeypatch, tags=()))
+    assert window.severity == "error"
+    assert "still holds 2 entry line(s), the first `- a late fix`" in window.message
+    assert "under `## v0.4.0`" in window.fix
+
+
+def test_an_unreleased_section_below_the_version_heading_is_read_too(tmp_path, monkeypatch):
+    _tree(tmp_path, version="0.4.0", static="0.4.0", changelog="## v0.4.0\n\n## [Unreleased]\nstray prose\n")
+    assert _codes(_check(tmp_path, monkeypatch, tags=()), "error") == ["release.changelog-window"]
+
+
+@pytest.mark.parametrize(
+    "changelog",
+    [
+        "## Unreleased\n\n## v0.4.0\n- shipped\n",
+        "## Unreleased\n\n### Added\n\n### Fixed\n\n## v0.4.0\n- shipped\n",
+        "# Changelog\n\n## v0.4.0\n- shipped\n",
+    ],
+    ids=["empty", "skeleton-subheadings", "no-unreleased"],
+)
+def test_a_final_version_over_an_empty_unreleased_passes(changelog, tmp_path, monkeypatch):
+    _tree(tmp_path, version="0.4.0", static="0.4.0", changelog=changelog)
+    (window,) = _window(_check(tmp_path, monkeypatch, tags=()))
+    assert window.severity == "ok"
+
+
+def test_entries_under_unreleased_are_fine_while_the_version_is_non_final(tmp_path, monkeypatch):
+    _tree(tmp_path, version="0.4.0.dev0", static="0.4.0.dev0", changelog="## Unreleased\n- in progress\n")
+    assert _codes(_check(tmp_path, monkeypatch, tags=()), "error") == []
+
+
 # --- the two literals (F9/2) ------------------------------------------------------------
 
 
