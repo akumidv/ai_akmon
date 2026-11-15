@@ -359,6 +359,7 @@ SNAPSHOT_FILES = (
     "bin/verify.py",
     "bin/verify.json",
     "bin/sync.json",
+    "hooks/session_start_text.py",
     "hooks/vocabulary.json",
     "hooks/hook_core.json",
     "hooks/delegation_log.json",

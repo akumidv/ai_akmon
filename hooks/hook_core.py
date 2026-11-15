@@ -38,7 +38,7 @@ from common.markers import (  # noqa: E402
     marker_kind,
     unidentified_identity,
 )
-from common.materialization import stale_materialized  # noqa: E402
+from common.materialization import materialized_names, stale_materialized  # noqa: E402
 from common.project_root import (  # noqa: E402
     AITNA_ROOT_DEFAULT,
     aitna_root,
@@ -2011,6 +2011,38 @@ def agent_roster(directory: Path, agents: list[str], start: dict[str, str], know
     return start["agent_separator"].join(entries)
 
 
+def _materialized_notice(root: Path, names_of: Callable[[Path, Path], list[str]]) -> str | None:
+    """The stale-guardrail line naming the files ``names_of(root, runtime_root)`` returns, or ``None``.
+
+    Both :func:`stale_guardrail_notice` (the files that differ) and :func:`stale_guardrail_ceiling`
+    (every materialized file) build the line here, after the same package-execution precondition.
+    """
+    runtime_root = akmon_runtime_root(root)
+    try:
+        if runtime_root.resolve() == akmon_mount(root).resolve():
+            return None
+    except OSError:
+        # SessionStart is advisory and fail-open. A pathological filesystem must not make a
+        # hook that cannot prove package execution block or warn about an inactive copy.
+        return None
+    names = names_of(root, runtime_root)
+    if not names:
+        return None
+    return jsondata.fill(
+        _hook_core_data()["stale_guardrail_notice"],
+        {"root_name": aitna_root_name(root), "names": ", ".join(names)},
+    )
+
+
+def stale_guardrail_ceiling(root: Path) -> str | None:
+    """The stale-guardrail line as it reads when every materialized file is behind the running tree.
+
+    The always-loaded counter's reading of the notice (ADR 0012 F18): a ceiling, ``None`` where the
+    notice cannot appear (a mounted mode, or no materialization yet).
+    """
+    return _materialized_notice(root, lambda project_root, _tree: materialized_names(project_root))
+
+
 def stale_guardrail_notice(root: Path) -> str | None:
     """One owner-addressed line when the materialized guardrails are behind the running tree.
 
@@ -2033,21 +2065,7 @@ def stale_guardrail_notice(root: Path) -> str | None:
     harness when the session starts, so running ``sync`` mid-session fixes the file on disk and
     changes nothing about the text already in context.
     """
-    runtime_root = akmon_runtime_root(root)
-    try:
-        if runtime_root.resolve() == akmon_mount(root).resolve():
-            return None
-    except OSError:
-        # SessionStart is advisory and fail-open. A pathological filesystem must not make a
-        # hook that cannot prove package execution block or warn about an inactive copy.
-        return None
-    names = stale_materialized(root, runtime_root)
-    if not names:
-        return None
-    return jsondata.fill(
-        _hook_core_data()["stale_guardrail_notice"],
-        {"root_name": aitna_root_name(root), "names": ", ".join(names)},
-    )
+    return _materialized_notice(root, stale_materialized)
 
 
 def _work_style_line(root: Path, session_id: str | None, start: Mapping[str, str]) -> str:
@@ -2061,28 +2079,19 @@ def _work_style_line(root: Path, session_id: str | None, start: Mapping[str, str
     return jsondata.fill(start["work_style_line"], {"style": found.style, "source": source})
 
 
-def session_start_result(root: Path, session_id: str | None = None) -> HookResult | None:
-    """SessionStart guardrail: active-agent declaration reminder, plus a stale-materialization notice.
+def session_start_context(root: Path, session_id: str | None, stale: str | None) -> str | None:
+    """The text the SessionStart hook puts in the model's context, or ``None`` when it has nothing to say.
 
-    One line states the work style in force for ``session_id`` and the level that set it (ADR 0031/D03);
-    when the work-style data cannot be read or has the wrong shape, that line alone is left out.
-
-    Runtime classification: operational
-    Rationale: it authors no rule. It aggregates the agent roster and re-delivers rules owned
-    elsewhere — role declaration, the memory-read rule, delegation-by-default — at session start,
-    and on Codex it is the only delivery channel for the delegation rule, because ``@``-imports are
-    not expanded there (C39). Delivery is not ownership, so the classification stands; without that
-    second fact "operational" would read as "incidental", which it is not.
+    The one owner of that text: :func:`session_start_result` and the always-loaded counter
+    (ADR 0012 F18) both build it here. ``stale`` is the stale-guardrail line to append, or ``None``;
+    the hook passes :func:`stale_guardrail_notice` and the counter :func:`stale_guardrail_ceiling`.
     """
-    stale = stale_guardrail_notice(root)
     dev = agent_names(aitna_root(root) / "agents", agent_definitions())
     desk = agent_names(root / "agents")
     if not dev and not desk:
         # A project with no agent charters still has to hear this one: it is about the rules
         # the harness just loaded, not about the roles it did not declare.
-        if stale is None:
-            return None
-        return HookResult(event_name="SessionStart", additional_context=stale, system_message=stale)
+        return stale
 
     # The line fragments are owned by hooks/hook_core.json (C102); the assembly — which lines
     # appear and in what order — stays here.
@@ -2112,14 +2121,30 @@ def session_start_result(root: Path, session_id: str | None = None) -> HookResul
     lines.append(jsondata.fill(start["memory_line"], {"root_name": aitna_root_name(root)}))
     if stale is not None:
         lines.append(stale)
+    return "\n".join(lines)
+
+
+def session_start_result(root: Path, session_id: str | None = None) -> HookResult | None:
+    """SessionStart guardrail: active-agent declaration reminder, plus a stale-materialization notice.
+
+    One line states the work style in force for ``session_id`` and the level that set it (ADR 0031/D03);
+    when the work-style data cannot be read or has the wrong shape, that line alone is left out.
+
+    Runtime classification: operational
+    Rationale: it authors no rule. It aggregates the agent roster and re-delivers rules owned
+    elsewhere — role declaration, the memory-read rule, delegation-by-default — at session start,
+    and on Codex it is the only delivery channel for the delegation rule, because ``@``-imports are
+    not expanded there (C39). Delivery is not ownership, so the classification stands; without that
+    second fact "operational" would read as "incidental", which it is not.
+    """
+    stale = stale_guardrail_notice(root)
+    context = session_start_context(root, session_id, stale)
+    if context is None:
+        return None
     # Dual channel for the stale-guardrail line only (requirement 11): it asks the *owner* for a
     # command and a restart, which the model cannot do for them. The reminder itself stays
     # context-only.
-    return HookResult(
-        event_name="SessionStart",
-        additional_context="\n".join(lines),
-        system_message=stale,
-    )
+    return HookResult(event_name="SessionStart", additional_context=context, system_message=stale)
 
 
 def _relative_within(candidate: Path, root: Path) -> str | None:

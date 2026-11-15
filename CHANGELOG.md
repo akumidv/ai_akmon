@@ -225,7 +225,13 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   `hooks/README.md`; the delegation rule in the generated AGENTS block, the session-start hook line and the
   model-routing line is said once each, the work-style clause intact; the generated `CLAUDE.md` no longer
   claims AGENTS.md carries a "read memory at session start" rule. No rule was dropped. Check: run
-  `akmon sync` and commit the new import line and the refreshed `CLAUDE.md`.
+  `akmon sync` and commit the new import line and the refreshed `CLAUDE.md`. The always-loaded count
+  (`caps.always-loaded`, in `akmon verify` and akmon's own CI) now also counts the session-start hook
+  text as a ceiling, reported as `hooks=<bytes>` in the finding, so moving a rule into a hook is not a
+  false saving; the consumer cap rises by that share, with nothing to do on your side.
+  akmon's own gates are declared in its record (`meta/.akmon.toml`: `[test].runner`, `[check]`), so
+  `akmon check` runs them and `akmon verify` no longer asks the standard running itself for the attach
+  keys; nothing changes for a consumer.
 - **The dev-layer root is declared by a `.aitna-root` file, and the `AITNA_ROOT` environment
   variable is removed (C157,
   [ADR-0022](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0022-local-layer-index-and-plans.md)/D09).**

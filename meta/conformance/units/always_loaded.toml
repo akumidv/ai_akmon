@@ -81,7 +81,7 @@ expected_json = '"consumer-total"'
 id = "vocab/caps"
 fn = "caps"
 args_json = '[]'
-expected_json = '{"akmon-shipped": {"lines": 460, "bytes": 28800}, "consumer-total": {"lines": 710, "bytes": 41800}}'
+expected_json = '{"akmon-shipped": {"lines": 474, "bytes": 31500}, "consumer-total": {"lines": 724, "bytes": 44500}}'
 
 [[case]]
 id = "vocab/severity"
@@ -1015,157 +1015,157 @@ expected_json = '["{{dir}}/n.md", "{{dir}}/a.md"]'
 id = "report/empty"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": ""}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=0/10 bytes=0/100"'
+expected_json = '"s: lines=0/10 bytes=0/100 hooks=0"'
 
 [[case]]
 id = "report/one-line-with-newline"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=1/10 bytes=2/100"'
+expected_json = '"s: lines=1/10 bytes=2/100 hooks=0"'
 
 [[case]]
 id = "report/one-line-without-newline"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=1/10 bytes=1/100"'
+expected_json = '"s: lines=1/10 bytes=1/100 hooks=0"'
 
 [[case]]
 id = "report/blank-lines-count"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\n\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=2/10 bytes=3/100"'
+expected_json = '"s: lines=2/10 bytes=3/100 hooks=0"'
 
 [[case]]
 id = "report/only-a-newline"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=1/10 bytes=1/100"'
+expected_json = '"s: lines=1/10 bytes=1/100 hooks=0"'
 
 [[case]]
 id = "report/crlf"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\r\nb\r\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=2/10 bytes=6/100"'
+expected_json = '"s: lines=2/10 bytes=6/100 hooks=0"'
 
 [[case]]
 id = "report/lone-cr"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\rb"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=2/10 bytes=3/100"'
+expected_json = '"s: lines=2/10 bytes=3/100 hooks=0"'
 
 [[case]]
 id = "report/ls"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u2028b"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=2/10 bytes=5/100"'
+expected_json = '"s: lines=2/10 bytes=5/100 hooks=0"'
 
 [[case]]
 id = "report/ps"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u2029b\u2029"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=2/10 bytes=8/100"'
+expected_json = '"s: lines=2/10 bytes=8/100 hooks=0"'
 
 [[case]]
 id = "report/nel"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u0085b"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=2/10 bytes=4/100"'
+expected_json = '"s: lines=2/10 bytes=4/100 hooks=0"'
 
 [[case]]
 id = "report/vt-ff"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u000bb\fc"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=3/10 bytes=5/100"'
+expected_json = '"s: lines=3/10 bytes=5/100 hooks=0"'
 
 [[case]]
 id = "report/fs-gs-rs"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u001cb\u001dc\u001ed"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=4/10 bytes=7/100"'
+expected_json = '"s: lines=4/10 bytes=7/100 hooks=0"'
 
 [[case]]
 id = "report/ls-alone"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "\u2028"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=1/10 bytes=3/100"'
+expected_json = '"s: lines=1/10 bytes=3/100 hooks=0"'
 
 [[case]]
 id = "report/bom-bytes"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "\ufeffa\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=1/10 bytes=5/100"'
+expected_json = '"s: lines=1/10 bytes=5/100 hooks=0"'
 
 [[case]]
 id = "report/two-byte"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "é\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=1/10 bytes=3/100"'
+expected_json = '"s: lines=1/10 bytes=3/100 hooks=0"'
 
 [[case]]
 id = "report/three-byte"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "€\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=1/10 bytes=4/100"'
+expected_json = '"s: lines=1/10 bytes=4/100 hooks=0"'
 
 [[case]]
 id = "report/four-byte-astral"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "😀\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=1/10 bytes=5/100"'
+expected_json = '"s: lines=1/10 bytes=5/100 hooks=0"'
 
 [[case]]
 id = "report/nbsp-is-not-a-break"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\u00a0b\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=1/10 bytes=5/100"'
+expected_json = '"s: lines=1/10 bytes=5/100 hooks=0"'
 
 [[case]]
 id = "report/tab-and-space-are-not-breaks"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\tb c\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=1/10 bytes=6/100"'
+expected_json = '"s: lines=1/10 bytes=6/100 hooks=0"'
 
 [[case]]
 id = "report/crlf-then-lf"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\r\n\nb"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=3/10 bytes=5/100"'
+expected_json = '"s: lines=3/10 bytes=5/100 hooks=0"'
 
 [[case]]
 id = "report/cr-cr-lf"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "a\r\r\nb"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"s: lines=3/10 bytes=5/100"'
+expected_json = '"s: lines=3/10 bytes=5/100 hooks=0"'
 
 [[case]]
 id = "report/sum-of-members"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "scope-x", "members": [{"$new": "Member", "fields": {"name": "a", "text": "1\n2\n"}}, {"$new": "Member", "fields": {"name": "b", "text": "xyz"}}, {"$new": "Member", "fields": {"name": "c", "text": "é"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
-expected_json = '"scope-x: lines=4/10 bytes=9/100"'
+expected_json = '"scope-x: lines=4/10 bytes=9/100 hooks=0"'
 
 [[case]]
 id = "report/no-separator-between-members"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "a", "text": "no newline"}}, {"$new": "Member", "fields": {"name": "b", "text": "next"}}]}}, {"$new": "Cap", "fields": {"lines": 5, "bytes": 50}}]'
-expected_json = '"s: lines=2/5 bytes=14/50"'
+expected_json = '"s: lines=2/5 bytes=14/50 hooks=0"'
 
 [[case]]
 id = "report/no-members"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": []}}, {"$new": "Cap", "fields": {"lines": 3, "bytes": 7}}]'
-expected_json = '"s: lines=0/3 bytes=0/7"'
+expected_json = '"s: lines=0/3 bytes=0/7 hooks=0"'
 
 [[case]]
 id = "report/uses-the-cap-as-given"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "a", "text": "x\n"}}]}}, {"$new": "Cap", "fields": {"lines": 0, "bytes": 0}}]'
-expected_json = '"s: lines=1/0 bytes=2/0"'
+expected_json = '"s: lines=1/0 bytes=2/0 hooks=0"'
 
 [[case]]
 id = "report/scope-name-verbatim"
 fn = "report"
 args_json = '[{"$new": "Population", "fields": {"scope": "a b: c", "members": [{"$new": "Member", "fields": {"name": "a", "text": "x"}}]}}, {"$new": "Cap", "fields": {"lines": 1, "bytes": 1}}]'
-expected_json = '"a b: c: lines=1/1 bytes=1/1"'
+expected_json = '"a b: c: lines=1/1 bytes=1/1 hooks=0"'
 
 # --- over: the inclusive boundary on each dimension (Cap {lines, bytes}) ---
 
@@ -1265,83 +1265,83 @@ expected_json = 'null'
 id = "pop/block-without-imports"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro\n\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro\n\n## Project\n\nhand-owned prose\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro\n\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro\n\n## Project\n\nhand-owned prose\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/block-chain-and-tail"
 fn = "populations"
 args_json = '["# AGENTS.md\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "rule one\nrule two\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "rule one\nrule two\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# AGENTS.md\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "rule one\nrule two\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "rule one\nrule two\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# AGENTS.md\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "rule one\nrule two\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/import-in-the-tail-is-prose-only"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n@extra.md\n", {"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "extra.md" = "e\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n@extra.md\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n@extra.md\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/import-in-the-block-counts-in-both"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n@extra.md\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
 files = { "extra.md" = "e\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n@extra.md\n"}, {"name": "extra.md", "text": "e\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n@extra.md\n## Project\n\nhand-owned prose\n"}, {"name": "extra.md", "text": "e\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n@extra.md\n"}, {"name": "extra.md", "text": "e\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n@extra.md\n## Project\n\nhand-owned prose\n"}, {"name": "extra.md", "text": "e\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/missing-import"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/chain-is-transitive-and-once"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "common\n@nested.md\n@nested.md\n", "_aitna/.akmon/guardrails/nested.md" = "nested\n@_common.md\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "common\n@nested.md\n@nested.md\n"}, {"name": "_aitna/.akmon/guardrails/nested.md", "text": "nested\n@_common.md\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "common\n@nested.md\n@nested.md\n"}, {"name": "_aitna/.akmon/guardrails/nested.md", "text": "nested\n@_common.md\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "common\n@nested.md\n@nested.md\n"}, {"name": "_aitna/.akmon/guardrails/nested.md", "text": "nested\n@_common.md\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "common\n@nested.md\n@nested.md\n"}, {"name": "_aitna/.akmon/guardrails/nested.md", "text": "nested\n@_common.md\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/links-and-examples-stay-out"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n- [roles](r.md) — link\n<!-- @c.md -->\n`@d.md`\n```\n@e.md\n```\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "r.md" = "R\n", "c.md" = "C\n", "d.md" = "D\n", "e.md" = "E\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n- [roles](r.md) — link\n<!-- @c.md -->\n`@d.md`\n```\n@e.md\n```\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n- [roles](r.md) — link\n<!-- @c.md -->\n`@d.md`\n```\n@e.md\n```\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n- [roles](r.md) — link\n<!-- @c.md -->\n`@d.md`\n```\n@e.md\n```\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n- [roles](r.md) — link\n<!-- @c.md -->\n`@d.md`\n```\n@e.md\n```\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/selected-added-after-the-chain"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/_aitna/.akmon/profiles/python.md"}]]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "_aitna/.akmon/profiles/python.md" = "py\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/selected-already-in-the-chain-is-not-doubled"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/_aitna/.akmon/profiles/python.md"}, {"$path": "{{dir}}/_aitna/.akmon/guardrails/_common.md"}]]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "_aitna/.akmon/profiles/python.md" = "py\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "_aitna/.akmon/profiles/python.md", "text": "py\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/selected-twice-counts-once"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/p.md"}, {"$path": "{{dir}}/p.md"}]]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "p.md" = "p\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "p.md", "text": "p\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "p.md", "text": "p\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "p.md", "text": "p\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "p.md", "text": "p\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/selected-missing-is-skipped"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/nope.md"}]]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/selected-directory-is-skipped"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/d"}]]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "d/x.md" = "x\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/selected-through-a-link-takes-the-target-name"
@@ -1349,7 +1349,7 @@ fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [{"$path": "{{dir}}/lnk.md"}]]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n", "real.md" = "p\n" }
 links = { "lnk.md" = "{{dir}}/real.md" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "real.md", "text": "p\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "real.md", "text": "p\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "real.md", "text": "p\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}, {"name": "real.md", "text": "p\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/selected-outside-the-root-raises"
@@ -1373,7 +1373,7 @@ id = "pop/selected-empty-list"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, []]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/root-through-a-link"
@@ -1381,49 +1381,49 @@ fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}/proj"}]'
 files = { "real/_aitna/.akmon/guardrails/_common.md" = "r\n" }
 links = { "proj" = "{{dir}}/real" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/crlf-agents-text-is-kept-as-given"
 fn = "populations"
 args_json = '["# A\r\n\r\n## Dev layer — akmon\r\n\r\nintro\r\n@_aitna/.akmon/guardrails/_common.md\r\n## P\r\nx\r\n", {"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\r\n\r\nintro\r\n@_aitna/.akmon/guardrails/_common.md\r\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\r\n\r\n## Dev layer — akmon\r\n\r\nintro\r\n@_aitna/.akmon/guardrails/_common.md\r\n## P\r\nx\r\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\r\n\r\nintro\r\n@_aitna/.akmon/guardrails/_common.md\r\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\r\n\r\n## Dev layer — akmon\r\n\r\nintro\r\n@_aitna/.akmon/guardrails/_common.md\r\n## P\r\nx\r\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "r\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/crlf-file-is-translated"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "one\r\ntwo\r\nthree\rfour" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "one\ntwo\nthree\nfour"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "one\ntwo\nthree\nfour"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "one\ntwo\nthree\nfour"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "one\ntwo\nthree\nfour"}], "hooks": []}}'
 
 [[case]]
 id = "pop/bom-file-keeps-its-bom"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "﻿rule\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "\ufeffrule\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "\ufeffrule\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "﻿rule\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro line\n\n@_aitna/.akmon/guardrails/_common.md\n\n## Project\n\nhand-owned prose\n"}, {"name": "_aitna/.akmon/guardrails/_common.md", "text": "﻿rule\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/ls-in-agents-text"
 fn = "populations"
 args_json = '["# A\u2028## Dev layer — akmon\u2028@_aitna/.akmon/guardrails/_common.md\u2028## P\u2028x", {"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\u2028@_aitna/.akmon/guardrails/_common.md\u2028"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\u2028## Dev layer — akmon\u2028@_aitna/.akmon/guardrails/_common.md\u2028## P\u2028x"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon @_aitna/.akmon/guardrails/_common.md "}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A ## Dev layer — akmon @_aitna/.akmon/guardrails/_common.md ## P x"}], "hooks": []}}'
 
 [[case]]
 id = "pop/import-in-a-fenced-block-heading-line-is-text"
 fn = "populations"
 args_json = '["# A\n## Dev layer — akmon\n```\n@_aitna/.akmon/guardrails/_common.md\n```\n", {"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon/guardrails/_common.md" = "r\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n```\n@_aitna/.akmon/guardrails/_common.md\n```\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n## Dev layer — akmon\n```\n@_aitna/.akmon/guardrails/_common.md\n```\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n```\n@_aitna/.akmon/guardrails/_common.md\n```\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n## Dev layer — akmon\n```\n@_aitna/.akmon/guardrails/_common.md\n```\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/same-file-twice-via-spellings"
 fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n@a.md\n@./a.md\n@sub/../a.md\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
 files = { "a.md" = "a\n", "sub/x.md" = "x\n" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n@a.md\n@./a.md\n@sub/../a.md\n"}, {"name": "a.md", "text": "a\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n@a.md\n@./a.md\n@sub/../a.md\n## Project\n\nhand-owned prose\n"}, {"name": "a.md", "text": "a\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n@a.md\n@./a.md\n@sub/../a.md\n"}, {"name": "a.md", "text": "a\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n@a.md\n@./a.md\n@sub/../a.md\n## Project\n\nhand-owned prose\n"}, {"name": "a.md", "text": "a\n"}], "hooks": []}}'
 
 [[case]]
 id = "pop/nested-not-utf8-raises"
@@ -1440,4 +1440,22 @@ fn = "populations"
 args_json = '["# A\n\n## Dev layer — akmon\n@~/a.md\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}]'
 files = { "a.md" = "a\n" }
 env = { HOME = "{{dir}}" }
-expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n@~/a.md\n"}, {"name": "a.md", "text": "a\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n@~/a.md\n## Project\n\nhand-owned prose\n"}, {"name": "a.md", "text": "a\n"}]}}'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n@~/a.md\n"}, {"name": "a.md", "text": "a\n"}], "hooks": []}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n@~/a.md\n## Project\n\nhand-owned prose\n"}, {"name": "a.md", "text": "a\n"}], "hooks": []}}'
+
+[[case]]
+id = "report/hooks-are-counted-and-reported-apart"
+fn = "report"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "ab\n"}}], "hooks": [{"$new": "Member", "fields": {"name": "h", "text": "cd\nef\n"}}]}}, {"$new": "Cap", "fields": {"lines": 10, "bytes": 100}}]'
+expected_json = '"s: lines=3/10 bytes=9/100 hooks=6"'
+
+[[case]]
+id = "over/hook-bytes-count-toward-the-cap"
+fn = "over"
+args_json = '[{"$new": "Population", "fields": {"scope": "s", "members": [{"$new": "Member", "fields": {"name": "m", "text": "yyyyy"}}], "hooks": [{"$new": "Member", "fields": {"name": "h", "text": "yyyyyy"}}]}}, {"$new": "Cap", "fields": {"lines": 5, "bytes": 10}}]'
+expected_json = 'true'
+
+[[case]]
+id = "pop/hooks-join-both-scopes"
+fn = "populations"
+args_json = '["# A\n\n## Dev layer — akmon\n\nintro\n\n## Project\n\nhand-owned prose\n", {"$path": "{{dir}}"}, [], [{"$new": "Member", "fields": {"name": "hook: x", "text": "one\n"}}]]'
+expected_json = '{"akmon-shipped": {"scope": "akmon-shipped", "members": [{"name": "AGENTS.md (akmon block)", "text": "## Dev layer — akmon\n\nintro\n\n"}], "hooks": [{"name": "hook: x", "text": "one\n"}]}, "consumer-total": {"scope": "consumer-total", "members": [{"name": "AGENTS.md", "text": "# A\n\n## Dev layer — akmon\n\nintro\n\n## Project\n\nhand-owned prose\n"}], "hooks": [{"name": "hook: x", "text": "one\n"}]}}'

@@ -56,7 +56,7 @@ test("the readers answer what the data file carries", () => {
   assert.equal(blockHeading(data), "## Dev layer — akmon");
   assert.equal(shipped(data), "akmon-shipped");
   assert.equal(consumer(data), "consumer-total");
-  assert.deepEqual(caps(data), { "akmon-shipped": new Cap(460, 28800), "consumer-total": new Cap(710, 41800) });
+  assert.deepEqual(caps(data), { "akmon-shipped": new Cap(474, 31500), "consumer-total": new Cap(724, 44500) });
   assert.deepEqual(severity(data), { "akmon-shipped": "error", "consumer-total": "warn" });
 });
 
@@ -174,8 +174,26 @@ test("an unreadable chain file raises UnicodeDecodeError, as read_text does", ()
 test("the report and the cap check read the same population", () => {
   const cap = new Cap(10, 100);
   const population = new Population("consumer-total", [new Member("m", "ab\ncd\n")]);
-  assert.equal(report(population, cap), "consumer-total: lines=2/10 bytes=6/100");
+  assert.equal(report(population, cap), "consumer-total: lines=2/10 bytes=6/100 hooks=0");
   assert.equal(over(population, new Cap(2, 6)), false);
   assert.equal(over(population, new Cap(1, 6)), true);
   assert.equal(over(population, new Cap(2, 5)), true);
+});
+
+test("hook text joins both scopes, is summed into the totals and is reported apart", () => {
+  withProject({}, (root) => {
+    const agents = `# AGENTS.md\n\n${BLOCK}${TAIL}`;
+    const hook = new Member("hook: x", "one\ntwo\n");
+    const found = /** @type {Record<string, Population>} */ (populations(data, agents, root, [], [hook]));
+    const bare = /** @type {Record<string, Population>} */ (populations(data, agents, root));
+    for (const scope of ["akmon-shipped", "consumer-total"]) {
+      assert.deepEqual(found[scope].hooks, [hook]);
+      assert.equal(found[scope].hookSize, 8);
+      assert.equal(found[scope].size, bare[scope].size + 8);
+      assert.equal(found[scope].lines, bare[scope].lines + 2);
+      assert.ok(report(found[scope], new Cap(100, 1000)).endsWith(" hooks=8"));
+    }
+    assert.equal(bare["consumer-total"].hooks.length, 0);
+    assert.ok(Object.isFrozen(found["consumer-total"].hooks));
+  });
 });

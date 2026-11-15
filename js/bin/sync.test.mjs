@@ -50,6 +50,7 @@ import {
   unsupportedRecord,
   upsertTomlKey,
 } from "./sync.mjs";
+import { readAkmonToml } from "../common/record.mjs";
 
 const TREE = fs.realpathSync(posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "..", ".."));
 const SYNC = posix.join(TREE, "js", "bin", "sync.mjs");
@@ -185,6 +186,13 @@ test("isSelfHosted: the running tree without a mount is, a consumer in any mode 
   withScratch((scratch) => {
     assert.equal(isSelfHosted(mountedProject(scratch)), false);
   });
+});
+
+test("isSelfHosted: akmon's own record has no mount key, and the tree stays self-hosted (A49)", () => {
+  const record = readAkmonToml(posix.join(TREE, "meta", ".akmon.toml"));
+  assert.equal("mount" in record, false);
+  assert.equal(/** @type {{runner: string}} */ (record["test"]).runner, "uv run pytest");
+  assert.equal(isSelfHosted(TREE), true);
 });
 
 test("isSelfHosted: a root that is not the running tree is not, even without a record or a mount", () => {

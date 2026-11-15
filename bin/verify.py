@@ -26,7 +26,10 @@ from typing import Any
 # ``sys.path[0]`` is ``bin/`` — the tree root has to be added for the package to resolve. Done
 # here rather than left to the caller because both launchers are entry points in their own right.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# The SessionStart hook text the always-loaded counter adds (A49) is built by the hooks' own library.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
+import session_start_text
 import sync as sync_tool
 
 from common import always_loaded, jsondata
@@ -755,10 +758,14 @@ class Verifier:
     def _check_always_loaded(self, agents_text: str) -> None:
         """ADR 0012 F18, consumer-total scope: warn over the cap, report the measurement every run.
 
+        The measurement includes the SessionStart hook text, as a ceiling (``hooks=`` in the message).
+
         The consumer owns most of this population, so the finding stays ``warn``; ``--strict``
         turns it into a non-zero exit through the shared exit policy, not by changing severity.
         """
-        found = always_loaded.populations(agents_text, self.root)
+        found = always_loaded.populations(
+            agents_text, self.root, hooks=session_start_text.session_start_members(self.root)
+        )
         if found is None:
             return  # no marked akmon block: check_agents_md already reports the missing anchor
         population, cap = found[always_loaded.consumer()], always_loaded.caps()[always_loaded.consumer()]
@@ -1948,7 +1955,13 @@ class Verifier:
         or carrying a blank/non-string ``akmon_version`` or ``last_realign`` — is an error. A
         record that is *well-formed but behind* is an error too, and for its own reason: see
         :meth:`_check_realign_freshness`.
+
+        The standard running itself (:func:`sync.is_self_hosted`, C207) is no consumer: its record
+        declares its own gates (``[test]``, ``[check]``), has attached to nothing and has no pin
+        to realign to, so the attach keys are not asked of it (A49).
         """
+        if sync_tool.is_self_hosted(self.root):
+            return
         name = f"{self.aitna}/.akmon.toml"
         path = self.root / self.aitna / ".akmon.toml"
         if not (self.root / self.akmon).is_dir() and not path.is_file():

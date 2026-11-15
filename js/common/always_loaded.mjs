@@ -11,6 +11,11 @@
  * `len(text.splitlines())`, bytes the UTF-8 length. `over` and `report` read the same
  * {@link Population}, so the numbers a reader sees are the numbers the cap was checked against.
  *
+ * The text akmon's SessionStart hooks inject into the model's context joins **both** scopes as the
+ * {@link Population} `hooks` members (owner decision D-A49-HOOKCOUNT (a), task A49, ADR 0012 F18
+ * amendment): a ceiling built by `hooks/session_start_text.mjs`, summed into the totals and reported
+ * apart as `hooks=<bytes>`.
+ *
  * Data (the C102/C103 convention): this module never reads a file itself apart from the counted
  * texts. `data` is the parsed `common/always_loaded.json` (block heading, scopes, caps,
  * severities), read once by the caller through {@link readAlwaysLoadedData} and passed down as the
@@ -165,27 +170,34 @@ export class Member {
 }
 
 /**
- * The members of one scope and their summed measurements.
+ * The members of one scope, the hook text beside them, and their summed measurements.
  */
 export class Population {
   /**
    * @param {string} scope
    * @param {Iterable<Member>} members
+   * @param {Iterable<Member>} [hooks] the SessionStart hook text, counted in the totals and reported apart
    */
-  constructor(scope, members) {
+  constructor(scope, members, hooks = []) {
     this.scope = scope;
     this.members = Object.freeze([...members]);
+    this.hooks = Object.freeze([...hooks]);
     Object.freeze(this);
   }
 
-  /** Summed member lines, no synthetic separator. */
+  /** Summed member and hook lines, no synthetic separator. */
   get lines() {
-    return this.members.reduce((sum, member) => sum + member.lines, 0);
+    return [...this.members, ...this.hooks].reduce((sum, member) => sum + member.lines, 0);
   }
 
-  /** Summed member bytes, no synthetic separator. */
+  /** Summed member and hook bytes, no synthetic separator. */
   get size() {
-    return this.members.reduce((sum, member) => sum + member.size, 0);
+    return [...this.members, ...this.hooks].reduce((sum, member) => sum + member.size, 0);
+  }
+
+  /** The bytes of the hook text alone: how much of `size` comes from SessionStart hooks. */
+  get hookSize() {
+    return this.hooks.reduce((sum, member) => sum + member.size, 0);
   }
 }
 
@@ -361,9 +373,10 @@ function _union(root, head, chain, selected) {
  * @param {string} agentsText
  * @param {string} root
  * @param {string[]} [selected]
+ * @param {Member[]} [hooks] the SessionStart hook text (`hooks/session_start_text.mjs`), counted in both scopes
  * @returns {Record<string, Population> | null}
  */
-export function populations(data, agentsText, root, selected = []) {
+export function populations(data, agentsText, root, selected = [], hooks = []) {
   const block = markedBlock(data, agentsText);
   if (block === null) {
     return null;
@@ -375,24 +388,27 @@ export function populations(data, agentsText, root, selected = []) {
     [shippedScope]: new Population(
       shippedScope,
       _union(root, new Member("AGENTS.md (akmon block)", block), chain, [...selected]),
+      hooks,
     ),
     [consumerScope]: new Population(
       consumerScope,
       _union(root, new Member("AGENTS.md", agentsText), chain, [...selected]),
+      hooks,
     ),
   };
 }
 
 /**
- * The dynamic report — scope, then actual over cap for both dimensions.
+ * The dynamic report — scope, actual over cap for both dimensions, then the hook bytes inside them.
  *
- * The finding that carries it names the code, so the message does not repeat it.
+ * `hooks=` is a ceiling (every optional SessionStart line present); the finding that carries the
+ * report names the code, so the message does not repeat it.
  * @param {Population} population
  * @param {Cap} cap
  * @returns {string}
  */
 export function report(population, cap) {
-  return `${population.scope}: lines=${population.lines}/${cap.lines} bytes=${population.size}/${cap.bytes}`;
+  return `${population.scope}: lines=${population.lines}/${cap.lines} bytes=${population.size}/${cap.bytes} hooks=${population.hookSize}`;
 }
 
 /**

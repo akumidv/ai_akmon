@@ -1,0 +1,10 @@
+# akmon's own record: the gates of the standard developing on itself. No `mount` key — the
+# tree is the project (C207), and the attach keys a consumer carries are not asked of it.
+
+[test]
+runner = "uv run pytest"
+
+[check]
+lint = "uv run ruff check {files}"
+format = "uv run ruff format --check {files}"
+self-ci = "python3 meta/self_ci.py"

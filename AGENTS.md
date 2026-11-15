@@ -82,7 +82,9 @@ the format of a note or a plan line and its place stay with the code.
   ([ADR 0023/D07](docs/adr/0023-project-documents-layout.md#d07--an-experiment-leaves-its-results-in-the-tree-and-its-materials-in-its-ergon)).
 - Harness and vendor facts that took an experiment — not what vendor docs state plainly — live in
   `meta/MEASUREMENTS.md` with the version they were verified on. Grep it before a probe, cite a
-  row that covers the version in use, and add a row after a new probe, replay or source reading.
+  row that covers the version in use, and add a row after a new probe, replay or source reading. Claim
+  no Codex/Claude/Gemini capability parity without a live harness probe and a regression test for the
+  exact payload and enforcement behavior.
 - **Commits** follow the guardrail § Commits & ownership, narrowed in one place: the owner owns
   merges into the default branch, tags, pushes, publishing and consumer pin bumps, and **the main
   checkout is the owner's** — an agent changes no history there, on any branch, even when asked to
@@ -103,31 +105,9 @@ the format of a note or a plan line and its place stay with the code.
 
 ## Verification
 
-Run:
-
-```bash
-uv run pytest
-uv run ruff check .
-uv run ruff format --check .
-python3 meta/self_ci.py
-uv build
-npm ci --ignore-scripts
-npx --no-install tsc --checkJs --noEmit -p .
-node --test "js/**/*.test.mjs"
-npx --no-install oxlint .
-npx --no-install oxfmt --check .
-```
-
-The node toolchain's legs (from C103) need `node` (>= 22) and `npm` on PATH, and `npm ci`
-needs registry reach; the JS self-CI legs follow the wheel-smoke stance — a leg that fails on
-a prerequisite says so in its finding rather than reporting a bare exit status.
-
-`meta/self_ci.py`'s installed-wheel leg runs `akmon init --mode package`, which resolves the pin
-from the akmon repository's **release tags over the network**. It therefore needs network reach
-and a git credential helper that works *outside* this checkout — verify with
-`git ls-remote --tags <repo>` from a directory that is not a git repository, and wire it with
-`gh auth login` then `gh auth setup-git`. Without that the leg fails on the prerequisite, not on
-anything akmon ships; the finding says so rather than reporting a bare exit status.
-
-Do not claim Codex/Claude/Gemini capability parity without a live harness probe and a regression
-test for the exact payload and enforcement behavior.
+The gates are the record's own: `[test].runner` and `[check]` in `meta/.akmon.toml` — run the checks
+with `akmon check` and the tests with the runner, as the [pre-commit](pipelines/pre-commit.md)
+pipeline says. `meta/self_ci.py` is one of those checks: it builds and installs the wheel and runs
+the JavaScript legs (`tsc`, `node --test`, `oxlint`, `oxfmt`), and its finding names a missing
+prerequisite (`node` and `npm`, registry reach, a git credential helper outside the checkout)
+instead of a bare exit status.

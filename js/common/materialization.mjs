@@ -193,6 +193,49 @@ export function materializedDir(projectRoot) {
 }
 
 /**
+ * Each materialized file as `[<directory>/<name>, name, directory]`, imported directories in order.
+ * @param {MaterializationData} data
+ * @param {string} projectRoot
+ * @returns {Array<[string, string, string]>}
+ */
+function _materializedFiles(data, projectRoot) {
+  /** @type {Array<[string, string, string]>} */
+  const found = [];
+  for (const directory of importedDirs(data)) {
+    const dest = _under(materializedDir(projectRoot), directory);
+    if (!_isDir(dest)) {
+      continue;
+    }
+    /** @type {string[]} */
+    let names = [];
+    try {
+      names = fs.readdirSync(dest).filter((name) => name.endsWith(".md") || name.endsWith(".toml"));
+    } catch (error) {
+      if (!_isOSError(error)) {
+        throw error;
+      }
+    }
+    for (const name of codePointSort(names)) {
+      found.push([`${directory}/${name}`, name, dest]);
+    }
+  }
+  return found;
+}
+
+/**
+ * Every file `staleMaterialized` compares, as `<directory>/<name>`: the notice's worst case.
+ *
+ * The always-loaded counter names them all in the stale-guardrail notice it counts, since the notice
+ * appears only once a pin bump leaves some behind. Twin of `materialized_names`.
+ * @param {MaterializationData} data the parsed `common/materialization.json`
+ * @param {string} projectRoot
+ * @returns {string[]}
+ */
+export function materializedNames(data, projectRoot) {
+  return _materializedFiles(data, projectRoot).map(([relative]) => relative);
+}
+
+/**
  * Materialized files whose text is no longer what `treeRoot` ships.
  *
  * Materialized files are named `guardrails/<name>`, `profiles/<name>`. `treeRoot` is the
@@ -216,36 +259,20 @@ export function materializedDir(projectRoot) {
 export function staleMaterialized(data, projectRoot, treeRoot) {
   /** @type {string[]} */
   const stale = [];
-  for (const directory of importedDirs(data)) {
-    const dest = _under(materializedDir(projectRoot), directory);
-    if (!_isDir(dest)) {
-      continue;
-    }
-    /** @type {string[]} */
-    let names = [];
+  for (const [relative, name, dest] of _materializedFiles(data, projectRoot)) {
+    const source = _under(treeRoot, relative);
     try {
-      names = fs.readdirSync(dest).filter((name) => name.endsWith(".md") || name.endsWith(".toml"));
+      if (
+        !_isFile(source) ||
+        readText(_under(dest, name)) !== materializedText(data, name, readText(source), projectRoot)
+      ) {
+        stale.push(relative);
+      }
     } catch (error) {
       if (!_isOSError(error)) {
         throw error;
       }
-    }
-    for (const name of codePointSort(names)) {
-      const relative = `${directory}/${name}`;
-      const source = _under(treeRoot, relative);
-      try {
-        if (
-          !_isFile(source) ||
-          readText(_under(dest, name)) !== materializedText(data, name, readText(source), projectRoot)
-        ) {
-          stale.push(relative);
-        }
-      } catch (error) {
-        if (!_isOSError(error)) {
-          throw error;
-        }
-        stale.push(relative);
-      }
+      stale.push(relative);
     }
   }
   return stale;

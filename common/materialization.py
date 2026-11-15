@@ -25,6 +25,7 @@ Stdlib-only and venv-free by contract, like every module in ``common/``.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 from common import jsondata
@@ -94,6 +95,25 @@ def materialized_dir(project_root: Path) -> Path:
     return aitna_root(project_root) / ".akmon"
 
 
+def _materialized_files(project_root: Path) -> Iterator[tuple[str, Path]]:
+    """Each materialized file as ``(<directory>/<name>, its path)``, imported directories in order."""
+    for directory in imported_dirs():
+        dest = materialized_dir(project_root) / directory
+        if not dest.is_dir():
+            continue
+        for path in sorted([*dest.glob("*.md"), *dest.glob("*.toml")]):
+            yield f"{directory}/{path.name}", path
+
+
+def materialized_names(project_root: Path) -> list[str]:
+    """Every file :func:`stale_materialized` compares, as ``<directory>/<name>``: the notice's worst case.
+
+    The always-loaded counter names them all in the stale-guardrail notice it counts, since the
+    notice appears only once a pin bump leaves some behind.
+    """
+    return [relative for relative, _path in _materialized_files(project_root)]
+
+
 def stale_materialized(project_root: Path, tree_root: Path) -> list[str]:
     """Materialized files whose text is no longer what ``tree_root`` ships.
 
@@ -112,18 +132,13 @@ def stale_materialized(project_root: Path, tree_root: Path) -> list[str]:
     compared" and "does not match" lead to the same instruction.
     """
     stale: list[str] = []
-    for directory in imported_dirs():
-        dest = materialized_dir(project_root) / directory
-        if not dest.is_dir():
-            continue
-        for path in sorted([*dest.glob("*.md"), *dest.glob("*.toml")]):
-            relative = f"{directory}/{path.name}"
-            source = tree_root / relative
-            try:
-                if not source.is_file() or path.read_text(encoding="utf-8") != materialized_text(
-                    path.name, source.read_text(encoding="utf-8"), project_root
-                ):
-                    stale.append(relative)
-            except OSError:
+    for relative, path in _materialized_files(project_root):
+        source = tree_root / relative
+        try:
+            if not source.is_file() or path.read_text(encoding="utf-8") != materialized_text(
+                path.name, source.read_text(encoding="utf-8"), project_root
+            ):
                 stale.append(relative)
+        except OSError:
+            stale.append(relative)
     return stale

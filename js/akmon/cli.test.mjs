@@ -41,6 +41,7 @@ const HOOK_STEMS = [
   "model-routing",
   "role-on-code",
   "session-start-agent",
+  "session_start_text",
   "settings-env-guard",
   "work-style",
 ];

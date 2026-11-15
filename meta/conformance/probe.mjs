@@ -1360,7 +1360,7 @@ const ROUTING_CLASS_FIELDS = /** @type {Record<string, string[]>} */ ({
   GateRule: ["role", "trigger", "noun", "headings", "anchor"],
   Cap: ["lines", "bytes"],
   Member: ["name", "text"],
-  Population: ["scope", "members"],
+  Population: ["scope", "members", "hooks"],
 });
 
 /** The dataclasses built from one options object of camelCase keys instead of positionally. */

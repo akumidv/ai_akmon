@@ -107,6 +107,24 @@ def tool_command(runtime_root: str, tool: str) -> str:
     return jsondata.fill(texts["mount"], {"runtime_root": runtime_root, "tool": tool})
 
 
+def tool_command_ceiling(mount_display: str, tool: str) -> str:
+    """The longest spelling of ``tool``'s command over every launcher the data declares.
+
+    The always-loaded counter's reading of :func:`tool_command` (ADR 0012 F18): the spelling a hook
+    injects depends on which implementation runs it and from which tree, and the count must not (the
+    Python and Node counters answer one number). ``mount_display`` is the mount spelling of the runtime
+    root (``<dev root>/akmon``); the longest of the mount, ``akmon tool`` and ``npx akmon tool`` forms
+    is the ceiling.
+    """
+    texts = _agents_data()["tool_command"]
+    spellings = (
+        jsondata.fill(texts["mount"], {"runtime_root": mount_display, "tool": tool}),
+        jsondata.fill(texts["python"], {"tool": tool}),
+        jsondata.fill(texts["node"], {"tool": tool}),
+    )
+    return max(spellings, key=lambda text: len(text.encode("utf-8")))
+
+
 def settings_probe_names() -> tuple[str, ...]:
     """The ``.claude`` settings files the default-model probe reads, local first (single owner)."""
     return tuple(_agents_data()["settings_probe_names"])
@@ -2129,9 +2147,21 @@ def status_lines(config: dict, registry: dict, init_command: str, project_root: 
     passed in rather than derived here because only the caller knows the project root; naming
     the mount unconditionally used to hand a package-mode session a path that does not exist.
     """
+    orchestrator_vendor = str(config.get("vendor") or "anthropic")
+    second = _second_opinion_status(registry, config, orchestrator_vendor, project_root)
+    return status_block(config, registry, init_command, second)
+
+
+def status_block(config: dict, registry: dict, init_command: str, second: tuple[str, str | None]) -> list[str]:
+    """The status lines for a binding, given the second-opinion ``(display, warning)`` already resolved.
+
+    The one assembly of the steady-state text: :func:`status_lines` resolves ``second`` against the host,
+    and the always-loaded counter (:func:`session_start_ceiling`) passes a fixed pair, so what a hook injects
+    and what is counted come from this one function.
+    """
+    second_display, second_warning = second
     binding = config.get("binding", {})
     orchestrator_vendor = str(config.get("vendor") or "anthropic")
-    second_display, second_warning = _second_opinion_status(registry, config, orchestrator_vendor, project_root)
     orchestrator = config.get("orchestrator", "?")
     texts = _agents_data()["status_lines"]
     lines = [
@@ -2203,6 +2233,37 @@ def init_instruction(reason: str, init_command: str) -> list[str]:
     """
     values = {"reason": reason, "init_command": init_command}
     return [jsondata.fill(line, values) for line in _agents_data()["init_instruction"]]
+
+
+def session_start_ceiling(registry: dict, init_command: str) -> str:
+    """The longest text the model-routing hook can inject when a session starts, under ``registry``.
+
+    The always-loaded counter's reading of the hook (ADR 0012 F18): a ceiling, not the text of one
+    session. Every vendor with a routing policy is bound the way the hook's status line reads a binding,
+    with the orchestrator on the top rung (the corridor warning present), second opinion on and its
+    chain empty (the longest display and its warning); the setup instruction is built for each reason
+    :func:`staleness` can give. The longest of those forms, in UTF-8 bytes, is the answer. It is
+    deterministic: nothing is read from the host, the transcript or the developer's local config, so
+    the second-opinion display the hook resolves against ``PATH`` is a fixed pair here. A warning that
+    needs a broken overlay or a floor gap in a recorded config is not synthesised.
+    """
+    texts = _agents_data()
+    opinion = texts["opinion_status"]
+    reasons = texts["staleness"]
+    candidates: list[str] = []
+    for vendor in vendors_with_routing_policy(registry):
+        rungs, _semantic = selection_ladder(registry, vendor, None)
+        binding = compute_binding(registry, rungs[-1], None, vendor, None)
+        config = local_config(binding, registry, second_opinion=True, available=None)
+        second = (str(opinion["unavailable_unknown"]), jsondata.fill(opinion["chain_empty"], {"provider": vendor}))
+        candidates.append("\n".join(status_block(config, registry, init_command, second)))
+        setup_reasons = (
+            reasons["no_config"],
+            reasons["registry_changed"],
+            jsondata.fill(reasons["model_mismatch"], {"model": rungs[-1]}),
+        )
+        candidates.extend("\n".join(init_instruction(reason, init_command)) for reason in setup_reasons)
+    return max(candidates, key=lambda text: len(text.encode("utf-8")), default="")
 
 
 # --------------------------------------------------------------------------------------

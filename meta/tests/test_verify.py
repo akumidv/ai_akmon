@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import session_start_text
 import sync
 import verify
 
@@ -1349,6 +1350,25 @@ def test_attach_record_valid_is_ok(tmp_path):
     assert any("records akmon version v0.3.0" in m for m in _messages(verifier.findings, "ok"))
 
 
+def test_attach_record_is_not_asked_of_the_standard_running_itself(tmp_path, monkeypatch):
+    """A49: akmon's own record declares its gates, not the attach keys, so a missing key is no error."""
+    root = _make_project(tmp_path)
+    shutil.rmtree(root / "_aitna" / "akmon")
+    _attach(root).write_text('[test]\nrunner = "uv run pytest"\n', encoding="utf-8")
+    monkeypatch.setattr(sync, "_TREE_ROOT", root.resolve())
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert verifier.findings == []
+
+
+def test_attach_record_still_gates_a_consumer_whose_tree_is_elsewhere(tmp_path):
+    root = _make_project(tmp_path)
+    _attach(root).write_text('[test]\nrunner = "uv run pytest"\n', encoding="utf-8")
+    verifier = verify.Verifier(root)
+    verifier.check_attach_record()
+    assert "error" in _levels(verifier.findings)
+
+
 def _record(root: Path, *, pin: str, realigned: str) -> None:
     _attach(root).write_text(
         f'akmon_version = "{pin}"\nattached_archetype = "package/python"\nlast_realign = "{realigned}"\n',
@@ -2569,7 +2589,10 @@ _CONSUMER_CAP = always_loaded.caps()[always_loaded.consumer()]
 def _pad_to_consumer_lines(root: Path, lines: int) -> None:
     """Pad the hand-owned tail of AGENTS.md so the consumer-total population has ``lines`` lines."""
     agents = root / "AGENTS.md"
-    current = always_loaded.populations(agents.read_text(encoding="utf-8"), root)[always_loaded.consumer()].lines
+    hooks = session_start_text.session_start_members(root)
+    current = always_loaded.populations(agents.read_text(encoding="utf-8"), root, hooks=hooks)[
+        always_loaded.consumer()
+    ].lines
     padding = "\n## Notes\n" + "n\n" * (lines - current - 2)
     agents.write_text(agents.read_text(encoding="utf-8") + padding, encoding="utf-8")
 

@@ -52,7 +52,7 @@ import {
   markerKind,
   unidentifiedIdentity,
 } from "../common/markers.mjs";
-import { staleMaterialized } from "../common/materialization.mjs";
+import { materializedNames, staleMaterialized } from "../common/materialization.mjs";
 import {
   AITNA_ROOT_DEFAULT,
   aitnaRootName,
@@ -2791,6 +2791,40 @@ export function agentRoster(directory, agents, start, known) {
 }
 
 /**
+ * The stale-guardrail line naming the files `namesOf(root, runtimeRoot)` returns, or `null`.
+ *
+ * Both {@link staleGuardrailNotice} (the files that differ) and {@link staleGuardrailCeiling} (every
+ * materialized file) build the line here, after the same package-execution precondition.
+ * @param {HookData} data
+ * @param {string} root
+ * @param {(root: string, runtimeRoot: string) => string[]} namesOf
+ * @returns {string | null}
+ */
+function _materializedNotice(data, root, namesOf) {
+  const runtimeRoot = akmonRuntimeRoot(root);
+  try {
+    if (_resolve(runtimeRoot) === _resolve(pyPath(root, aitnaRootName(root), "akmon"))) {
+      return null;
+    }
+  } catch (error) {
+    // SessionStart is advisory and fail-open. A pathological filesystem must not make a
+    // hook that cannot prove package execution block or warn about an inactive copy.
+    if (!isOSError(error)) {
+      throw error;
+    }
+    return null;
+  }
+  const names = namesOf(root, runtimeRoot);
+  if (names.length === 0) {
+    return null;
+  }
+  return fill(_core(data, "stale_guardrail_notice"), {
+    root_name: aitnaRootName(root),
+    names: names.join(", "),
+  });
+}
+
+/**
  * One owner-addressed line when the materialized guardrails are behind the running tree.
  *
  * The interactive half of the freshness guarantee (C77). `sync --check` and `verify` already
@@ -2813,27 +2847,22 @@ export function agentRoster(directory, agents, start, known) {
  * @returns {string | null}
  */
 export function staleGuardrailNotice(data, root) {
-  const runtimeRoot = akmonRuntimeRoot(root);
-  try {
-    if (_resolve(runtimeRoot) === _resolve(pyPath(root, aitnaRootName(root), "akmon"))) {
-      return null;
-    }
-  } catch (error) {
-    // SessionStart is advisory and fail-open. A pathological filesystem must not make a
-    // hook that cannot prove package execution block or warn about an inactive copy.
-    if (!isOSError(error)) {
-      throw error;
-    }
-    return null;
-  }
-  const names = staleMaterialized(data.materialization, root, runtimeRoot);
-  if (names.length === 0) {
-    return null;
-  }
-  return fill(_core(data, "stale_guardrail_notice"), {
-    root_name: aitnaRootName(root),
-    names: names.join(", "),
-  });
+  return _materializedNotice(data, root, (projectRoot, treeRoot) =>
+    staleMaterialized(data.materialization, projectRoot, treeRoot),
+  );
+}
+
+/**
+ * The stale-guardrail line as it reads when every materialized file is behind the running tree.
+ *
+ * The always-loaded counter's reading of the notice (ADR 0012 F18): a ceiling, `null` where the
+ * notice cannot appear (a mounted mode, or no materialization yet). Twin of `stale_guardrail_ceiling`.
+ * @param {HookData} data
+ * @param {string} root
+ * @returns {string | null}
+ */
+export function staleGuardrailCeiling(data, root) {
+  return _materializedNotice(data, root, (projectRoot) => materializedNames(data.materialization, projectRoot));
 }
 
 /**
@@ -2854,32 +2883,25 @@ function _workStyleLine(data, root, sessionId, start) {
 }
 
 /**
- * SessionStart guardrail: active-agent declaration reminder, plus a stale-materialization notice.
+ * The text the SessionStart hook puts in the model's context, or `null` when it has nothing to say.
  *
- * Runtime classification: operational
- * Rationale: it authors no rule. It aggregates the agent roster and re-delivers rules owned
- * elsewhere — role declaration, the memory-read rule, delegation-by-default — at session start,
- * and on Codex it is the only delivery channel for the delegation rule, because `@`-imports are
- * not expanded there (C39). Delivery is not ownership, so the classification stands; without that
- * second fact "operational" would read as "incidental", which it is not.
- * One line states the work style in force for `sessionId` and the level that set it (ADR 0031/D03);
- * when the work-style data cannot be read or has the wrong shape, that line alone is left out.
+ * The one owner of that text: {@link sessionStartResult} and the always-loaded counter (ADR 0012 F18)
+ * both build it here. `stale` is the stale-guardrail line to append, or `null`; the hook passes
+ * {@link staleGuardrailNotice} and the counter {@link staleGuardrailCeiling}. Twin of
+ * `session_start_context`.
  * @param {HookData} data
  * @param {string} root
- * @param {string | null} [sessionId]
- * @returns {HookResult | null}
+ * @param {string | null} sessionId
+ * @param {string | null} stale
+ * @returns {string | null}
  */
-export function sessionStartResult(data, root, sessionId = null) {
-  const stale = staleGuardrailNotice(data, root);
+export function sessionStartContext(data, root, sessionId, stale) {
   const dev = agentNames(pyPath(root, aitnaRootName(root), "agents"), agentDefinitions(data));
   const desk = agentNames(pyPath(root, "agents"));
   if (dev.length === 0 && desk.length === 0) {
     // A project with no agent charters still has to hear this one: it is about the rules
     // the harness just loaded, not about the roles it did not declare.
-    if (stale === null) {
-      return null;
-    }
-    return new HookResult({ eventName: "SessionStart", additionalContext: stale, systemMessage: stale });
+    return stale;
   }
 
   // The line fragments are owned by hooks/hook_core.json (C102); the assembly — which lines
@@ -2918,14 +2940,35 @@ export function sessionStartResult(data, root, sessionId = null) {
   if (stale !== null) {
     lines.push(stale);
   }
+  return lines.join("\n");
+}
+
+/**
+ * SessionStart guardrail: active-agent declaration reminder, plus a stale-materialization notice.
+ *
+ * Runtime classification: operational
+ * Rationale: it authors no rule. It aggregates the agent roster and re-delivers rules owned
+ * elsewhere — role declaration, the memory-read rule, delegation-by-default — at session start,
+ * and on Codex it is the only delivery channel for the delegation rule, because `@`-imports are
+ * not expanded there (C39). Delivery is not ownership, so the classification stands; without that
+ * second fact "operational" would read as "incidental", which it is not.
+ * One line states the work style in force for `sessionId` and the level that set it (ADR 0031/D03);
+ * when the work-style data cannot be read or has the wrong shape, that line alone is left out.
+ * @param {HookData} data
+ * @param {string} root
+ * @param {string | null} [sessionId]
+ * @returns {HookResult | null}
+ */
+export function sessionStartResult(data, root, sessionId = null) {
+  const stale = staleGuardrailNotice(data, root);
+  const context = sessionStartContext(data, root, sessionId, stale);
+  if (context === null) {
+    return null;
+  }
   // Dual channel for the stale-guardrail line only (requirement 11): it asks the *owner* for a
   // command and a restart, which the model cannot do for them. The reminder itself stays
   // context-only.
-  return new HookResult({
-    eventName: "SessionStart",
-    additionalContext: lines.join("\n"),
-    systemMessage: stale,
-  });
+  return new HookResult({ eventName: "SessionStart", additionalContext: context, systemMessage: stale });
 }
 
 // --------------------------------------------------------------------------------------

@@ -13,6 +13,13 @@ synthetic separator: lines are ``len(text.splitlines())``, bytes ``len(text.enco
 decimal and inclusive. Vendor pointers, hook wiring, roles, pipelines, skills and on-demand
 documents are outside both scopes by construction: only the block's imports enter the chain.
 
+The text akmon's SessionStart hooks inject into the model's context is the one thing beyond the
+files that reaches it before it asks for anything (owner decision D-A49-HOOKCOUNT (a), task A49,
+ADR 0012 F18 amendment): moving a rule from an imported file into a hook would otherwise be a
+false saving. It joins **both** scopes as the :attr:`Population.hooks` members, a ceiling
+(every optional line present, see ``hooks/session_start_text.py``), summed into the totals and
+reported on its own as ``hooks=<bytes>``. The wiring itself stays outside the scopes.
+
 :func:`over` and :func:`report` read the same :class:`Population`, so the numbers a reader sees
 are the numbers the cap was checked against — never a stale constant.
 """
@@ -105,20 +112,26 @@ class Member:
 
 @dataclass(frozen=True)
 class Population:
-    """The members of one scope and their summed measurements."""
+    """The members of one scope, the hook text beside them, and their summed measurements."""
 
     scope: str
     members: tuple[Member, ...]
+    hooks: tuple[Member, ...] = ()
 
     @property
     def lines(self) -> int:
-        """Summed member lines, no synthetic separator."""
-        return sum(member.lines for member in self.members)
+        """Summed member and hook lines, no synthetic separator."""
+        return sum(member.lines for member in (*self.members, *self.hooks))
 
     @property
     def size(self) -> int:
-        """Summed member bytes, no synthetic separator."""
-        return sum(member.size for member in self.members)
+        """Summed member and hook bytes, no synthetic separator."""
+        return sum(member.size for member in (*self.members, *self.hooks))
+
+    @property
+    def hook_size(self) -> int:
+        """The bytes of the hook text alone: how much of :attr:`size` comes from SessionStart hooks."""
+        return sum(member.size for member in self.hooks)
 
 
 def marked_block(agents_text: str) -> str | None:
@@ -169,8 +182,13 @@ def _union(root: Path, head: Member, chain: list[Path], selected: list[Path]) ->
     return tuple(members)
 
 
-def populations(agents_text: str, root: Path, selected: Sequence[Path] = ()) -> dict[str, Population] | None:
-    """Both scopes for one project; None when ``AGENTS.md`` carries no marked akmon block."""
+def populations(
+    agents_text: str, root: Path, selected: Sequence[Path] = (), hooks: Sequence[Member] = ()
+) -> dict[str, Population] | None:
+    """Both scopes for one project; None when ``AGENTS.md`` carries no marked akmon block.
+
+    ``hooks`` is the SessionStart hook text (``hooks/session_start_text.py``), counted in both scopes.
+    """
     block = marked_block(agents_text)
     if block is None:
         return None
@@ -178,20 +196,26 @@ def populations(agents_text: str, root: Path, selected: Sequence[Path] = ()) -> 
     shipped_scope, consumer_scope = shipped(), consumer()
     return {
         shipped_scope: Population(
-            shipped_scope, _union(root, Member("AGENTS.md (akmon block)", block), chain, list(selected))
+            shipped_scope,
+            _union(root, Member("AGENTS.md (akmon block)", block), chain, list(selected)),
+            tuple(hooks),
         ),
         consumer_scope: Population(
-            consumer_scope, _union(root, Member("AGENTS.md", agents_text), chain, list(selected))
+            consumer_scope, _union(root, Member("AGENTS.md", agents_text), chain, list(selected)), tuple(hooks)
         ),
     }
 
 
 def report(population: Population, cap: Cap) -> str:
-    """The dynamic report — scope, then actual over cap for both dimensions.
+    """The dynamic report — scope, actual over cap for both dimensions, then the hook bytes inside them.
 
-    The finding that carries it names the code, so the message does not repeat it.
+    ``hooks=`` is a ceiling (every optional SessionStart line present); the finding that carries the
+    report names the code, so the message does not repeat it.
     """
-    return f"{population.scope}: lines={population.lines}/{cap.lines} bytes={population.size}/{cap.bytes}"
+    return (
+        f"{population.scope}: lines={population.lines}/{cap.lines} bytes={population.size}/{cap.bytes}"
+        f" hooks={population.hook_size}"
+    )
 
 
 def over(population: Population, cap: Cap) -> bool:

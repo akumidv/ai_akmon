@@ -2264,8 +2264,9 @@ export function printSummary(data, result, { root, mode }) {
  * @returns {string | null}
  */
 export function unsupportedRecord(data, root) {
-  // akmon's own tree has no record and needs none (C207): `sync` there writes the Python reference wiring.
-  if (isSelfHosted(root) && !isFile(pyPath(aitnaRoot(root), ".akmon.toml"))) {
+  // akmon's own tree needs no Node record (C207), and since A49 holds a record of its own (its gates,
+  // no `ecosystem`): `sync` there writes the Python reference wiring either way.
+  if (isSelfHosted(root)) {
     return null;
   }
   const what = unsupportedFound(data, root);

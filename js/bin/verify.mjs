@@ -69,6 +69,7 @@ import {
   importPrefix,
   hasPython,
   isPackageMode,
+  isSelfHosted,
   languageProfiles,
   nodeHooksDir,
   packagePinStatus,
@@ -83,6 +84,8 @@ import {
   unsupportedFound,
 } from "./sync.mjs";
 import * as alwaysLoaded from "../common/always_loaded.mjs";
+import { lazyHookData } from "../hooks/hook_data.mjs";
+import { sessionStartMembers } from "../hooks/session_start_text.mjs";
 import {
   checkTableOk,
   configTarget,
@@ -858,6 +861,11 @@ export class Verifier {
     return this._table("always", alwaysLoaded.readAlwaysLoadedData);
   }
 
+  /** The hooks' shared data bundle, for the SessionStart text the always-loaded counter adds (A49). */
+  get hookData() {
+    return this._table("hooks", () => lazyHookData());
+  }
+
   /** `common/codex_hooks.json`, via its twin. */
   get codexHooksData() {
     return this._table("codex", codexHooks.readCodexHooksData);
@@ -1247,7 +1255,13 @@ export class Verifier {
    */
   _checkAlwaysLoaded(agentsText) {
     const data = this.alwaysLoadedData;
-    const found = alwaysLoaded.populations(data, agentsText, this.root);
+    const found = alwaysLoaded.populations(
+      data,
+      agentsText,
+      this.root,
+      [],
+      sessionStartMembers(this.hookData, this.root),
+    );
     if (found === null) {
       return; // no marked akmon block: checkAgentsMd already reports the missing anchor
     }
@@ -2561,9 +2575,14 @@ export class Verifier {
    * project is" anchor that BOOTSTRAP §E diffs against akmon's CHANGELOG. A missing record is a
    * non-gating note, so it never fails `--strict`; only a *present but malformed* record is an
    * error — and a record that is well-formed but behind is one too, for its own reason
-   * ({@link checkRealignFreshness}).
+   * ({@link checkRealignFreshness}). The standard running itself ({@link isSelfHosted}, C207) is no
+   * consumer: its record declares its own gates (`[test]`, `[check]`), has attached to nothing and has
+   * no pin to realign to, so the attach keys are not asked of it (A49).
    */
   checkAttachRecord() {
+    if (isSelfHosted(this.root)) {
+      return;
+    }
     const name = `${this.aitna}/.akmon.toml`;
     const path = pyPath(this.root, this.aitna, ".akmon.toml");
     if (!isDir(pyPath(this.root, this.akmon)) && !isFile(path)) {

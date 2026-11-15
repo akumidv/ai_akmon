@@ -510,6 +510,27 @@ export function reminderTexts(due, data) {
 }
 
 /**
+ * The longest model-addressed reminder a session start can carry, as if one were due now.
+ *
+ * The always-loaded counter's reading of the learning hook (ADR 0012 F18): both wordings (since the
+ * last run, since counting began) at the thresholds' own counts, the longer in UTF-8 bytes. It reads
+ * no record and writes none, so counting the hook never counts a session. Twin of
+ * `learning.reminder_ceiling`.
+ * @param {Thresholds} thresholds
+ * @param {LearningData} data
+ * @returns {string}
+ */
+export function reminderCeiling(thresholds, data) {
+  const texts = [true, false].map(
+    (sinceRun) =>
+      reminderTexts(new Due(Number(thresholds.reminderSessions), Number(thresholds.reminderDays), sinceRun), data)[0],
+  );
+  return texts.reduce((longest, text) =>
+    Buffer.byteLength(text, "utf8") > Buffer.byteLength(longest, "utf8") ? text : longest,
+  );
+}
+
+/**
  * What a session start says about the learning run — `[for the model, for the owner]` — or null.
  *
  * Silent on a `source` the data lists in `skip_sources` (a compaction: the same session, whose

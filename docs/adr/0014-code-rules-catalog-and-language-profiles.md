@@ -88,9 +88,12 @@ prohibitions and process floors and each rule keeps one owner. The placement rul
 reads `rules/code.md` § Code design where it says `_common.md` § Code design. The file stays in
 `always_imported` (`bin/sync.json`): code is developed in every session, so it loads at session
 start in akmon and in every consumer, and a language profile layers on it as it did on the
-guardrail. Deferring the code rules to on-demand loading is rejected for now: it saves context only
-if sessions exist that never need them, and otherwise only delays the load; a measurement of
-sessions decides (A49).
+guardrail. Deferring the code rules to on-demand loading was measured and is closed (owner
+D-A49-ONDEMAND-3 (a), task A49): about a third of sessions never touch code, so the saving is real
+for them, but the only hook that could load the rules on the first code touch — `PreToolUse`
+`additionalContext` on an edit matcher — reaches the model after the tool result, so the first edit
+precedes the rules, and it never fires for a write made through the shell, which is how a delegated
+implementer writes. The code rules and the language profile bodies stay loaded at session start.
 
 ## Addressable accepted decision blocks
 

@@ -26,6 +26,10 @@ from pathlib import Path
 from common import always_loaded, materialization
 from common.findings import Finding
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "hooks"))
+
+import session_start_text
+
 #: Only the link text varies with the pin, a few bytes over the whole block.
 _REF = "v0.0.0"
 _AITNA = "_aitna"
@@ -54,6 +58,18 @@ def _largest_profile(akmon_root: Path) -> Path:
     return max(profiles, key=lambda path: (len(path.read_bytes()), path.name))
 
 
+def _write_charters(root: Path, akmon_root: Path) -> None:
+    """The agent charters `akmon init` writes into a package-mode consumer, so the roster line is the real one."""
+    if str(akmon_root / "src") not in sys.path:
+        sys.path.insert(0, str(akmon_root / "src"))
+    from akmon import _init  # noqa: PLC0415 — the generator is the source of this text
+
+    for agent, spec in _init._charters().items():
+        charter = root / _AITNA / "agents" / agent / "README.md"
+        charter.parent.mkdir(parents=True, exist_ok=True)
+        charter.write_text(_init._charter(agent, spec, _AITNA, package_mode=True), encoding="utf-8")
+
+
 def shipped_population(akmon_root: Path) -> always_loaded.Population:
     """What a package-mode consumer loads from akmon before it asks for anything."""
     agents = _generated_block(akmon_root)
@@ -65,7 +81,10 @@ def shipped_population(akmon_root: Path) -> always_loaded.Population:
             shutil.copytree(akmon_root / directory, mount / directory)
         (root / "AGENTS.md").write_text(agents, encoding="utf-8")
         selected = mount / "profiles" / _largest_profile(akmon_root).name
-        found = always_loaded.populations(agents, root, [selected])
+        _write_charters(root, akmon_root)
+        found = always_loaded.populations(
+            agents, root, [selected], hooks=session_start_text.session_start_members(root)
+        )
         if found is None:  # unreachable while the generator writes the heading it declares
             raise RuntimeError("the generated AGENTS.md carries no marked akmon block")
         return found[always_loaded.shipped()]

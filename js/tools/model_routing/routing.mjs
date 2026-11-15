@@ -298,6 +298,30 @@ export function toolCommand(data, runtimeRoot, tool) {
 }
 
 /**
+ * The longest spelling of `tool`'s command over every launcher the data declares.
+ *
+ * The always-loaded counter's reading of {@link toolCommand} (ADR 0012 F18): the spelling a hook
+ * injects depends on which implementation runs it and from which tree, and the count must not (the
+ * Python and Node counters answer one number). `mountDisplay` is the mount spelling of the runtime
+ * root (`<dev root>/akmon`); the longest of the mount, `akmon tool` and `npx akmon tool` forms is the
+ * ceiling. Twin of `tool_command_ceiling`.
+ * @param {AgentsData} data
+ * @param {string} mountDisplay
+ * @param {string} tool
+ * @returns {string}
+ */
+export function toolCommandCeiling(data, mountDisplay, tool) {
+  const spellings = [
+    fill(data.tool_command.mount, { runtime_root: mountDisplay, tool }),
+    fill(data.tool_command.python, { tool }),
+    fill(data.tool_command.node, { tool }),
+  ];
+  return spellings.reduce((longest, text) =>
+    Buffer.byteLength(text, "utf8") > Buffer.byteLength(longest, "utf8") ? text : longest,
+  );
+}
+
+/**
  * The `.claude` settings files the default-model probe reads, local first (single owner).
  * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
  * @returns {string[]}
@@ -3365,16 +3389,28 @@ function _escalationHint(config) {
  * @returns {string[]}
  */
 export function statusLines(data, runtimeData, config, registry, initCommand, projectRoot) {
+  const orchestratorVendor = _pyStr(_or(_get(config, "vendor"), "anthropic"));
+  const second = _secondOpinionStatus(data, runtimeData, registry, config, orchestratorVendor, projectRoot);
+  return statusBlock(data, config, registry, initCommand, second);
+}
+
+/**
+ * The status lines for a binding, given the second-opinion `[display, warning]` already resolved.
+ *
+ * The one assembly of the steady-state text: {@link statusLines} resolves `second` against the host,
+ * and the always-loaded counter ({@link sessionStartCeiling}) passes a fixed pair, so what a hook
+ * injects and what is counted come from this one function. Twin of `status_block`.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} config
+ * @param {Json} registry
+ * @param {string} initCommand
+ * @param {[string, string | null]} second
+ * @returns {string[]}
+ */
+export function statusBlock(data, config, registry, initCommand, second) {
+  const [secondDisplay, secondWarning] = second;
   const binding = _get(config, "binding", {});
   const orchestratorVendor = _pyStr(_or(_get(config, "vendor"), "anthropic"));
-  const [secondDisplay, secondWarning] = _secondOpinionStatus(
-    data,
-    runtimeData,
-    registry,
-    config,
-    orchestratorVendor,
-    projectRoot,
-  );
   const orchestrator = _get(config, "orchestrator", "?");
   const texts = data.status_lines;
   const lines = [
@@ -3456,6 +3492,46 @@ export function rebindNotice(data, config, registry) {
 export function initInstruction(data, reason, initCommand) {
   const values = { reason, init_command: initCommand };
   return data.init_instruction.map((line) => fill(line, values));
+}
+
+/**
+ * The longest text the model-routing hook can inject when a session starts, under `registry`.
+ *
+ * The always-loaded counter's reading of the hook (ADR 0012 F18): a ceiling, not the text of one
+ * session. Every vendor with a routing policy is bound the way the hook's status line reads a binding,
+ * with the orchestrator on the top rung (the corridor warning present), second opinion on and its chain
+ * empty (the longest display and its warning); the setup instruction is built for each reason
+ * {@link staleness} can give. The longest of those forms, in UTF-8 bytes, is the answer. Nothing is read
+ * from the host, the transcript or the developer's local config, so the second-opinion display the hook
+ * resolves against `PATH` is a fixed pair here. Twin of `session_start_ceiling`.
+ * @param {AgentsData} data the parsed `tools/model_routing/agents.json`
+ * @param {Json} registry
+ * @param {string} initCommand
+ * @returns {string}
+ */
+export function sessionStartCeiling(data, registry, initCommand) {
+  const opinion = data.opinion_status;
+  const reasons = data.staleness;
+  /** @type {string[]} */
+  const candidates = [];
+  for (const vendor of vendorsWithRoutingPolicy(registry)) {
+    const [rungs] = selectionLadder(registry, vendor, null);
+    const top = rungs[rungs.length - 1];
+    const binding = computeBinding(data, registry, top, null, vendor, null);
+    const config = localConfig(data, binding, registry, { secondOpinion: true, available: null });
+    const second = /** @type {[string, string | null]} */ ([
+      opinion.unavailable_unknown,
+      fill(opinion.chain_empty, { provider: vendor }),
+    ]);
+    candidates.push(statusBlock(data, config, registry, initCommand, second).join("\n"));
+    for (const reason of [reasons.no_config, reasons.registry_changed, fill(reasons.model_mismatch, { model: top })]) {
+      candidates.push(initInstruction(data, reason, initCommand).join("\n"));
+    }
+  }
+  return candidates.reduce(
+    (longest, text) => (Buffer.byteLength(text, "utf8") > Buffer.byteLength(longest, "utf8") ? text : longest),
+    "",
+  );
 }
 
 // --------------------------------------------------------------------------------------

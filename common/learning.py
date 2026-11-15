@@ -321,6 +321,20 @@ def reminder_texts(due: Due, data: dict[str, Any]) -> tuple[str, str]:
     return jsondata.fill(texts[f"model_{suffix}"], values), jsondata.fill(texts[f"owner_{suffix}"], values)
 
 
+def reminder_ceiling(thresholds: Thresholds, data: dict[str, Any]) -> str:
+    """The longest model-addressed reminder a session start can carry, as if one were due now.
+
+    The always-loaded counter's reading of the learning hook (ADR 0012 F18): both wordings (since
+    the last run, since counting began) at the thresholds' own counts, the longer in UTF-8 bytes.
+    It reads no record and writes none, so counting the hook never counts a session.
+    """
+    texts = (
+        reminder_texts(Due(thresholds.reminder_sessions, thresholds.reminder_days, since_run), data)[0]
+        for since_run in (True, False)
+    )
+    return max(texts, key=lambda text: len(text.encode("utf-8")))
+
+
 def session_reminder(
     state: LearningState, source: str | None, thresholds: Thresholds, now: datetime, data: dict[str, Any]
 ) -> tuple[str, str] | None:

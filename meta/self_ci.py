@@ -159,6 +159,7 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "src/akmon/update.json",
         "src/akmon/cli.json",
         *(f"hooks/{name}" for name in verify_tool.wired_hook_scripts()),
+        "hooks/session_start_text.py",
         "hooks/vocabulary.json",
         "hooks/hook_core.json",
         "hooks/delegation_log.json",

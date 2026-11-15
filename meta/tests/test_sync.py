@@ -683,6 +683,24 @@ def test_is_self_hosted_for_the_running_tree_without_a_mount(tmp_path, monkeypat
     assert sync.is_self_hosted(_self_hosted_root(tmp_path, monkeypatch))
 
 
+def test_is_self_hosted_holds_with_a_record_that_has_no_mount_key(tmp_path, monkeypatch):
+    """A49: akmon's own record carries `[test]` and `[check]` and no `mount`; it stays self-hosted."""
+    root = _self_hosted_root(tmp_path, monkeypatch)
+    (root / "_aitna").mkdir()
+    (root / "_aitna" / ".akmon.toml").write_text(
+        '[test]\nrunner = "uv run pytest"\n\n[check]\nlint = "uv run ruff check {files}"\n', encoding="utf-8"
+    )
+    assert sync.is_self_hosted(root)
+
+
+def test_akmons_own_record_has_no_mount_key_and_the_tree_stays_self_hosted():
+    root = Path(__file__).resolve().parents[2]
+    record = sync.read_akmon_toml(sync.aitna_root(root) / ".akmon.toml")
+    assert "mount" not in record
+    assert record["test"]["runner"] == "uv run pytest"
+    assert sync.is_self_hosted(root)
+
+
 def test_is_self_hosted_is_false_for_a_consumer(tmp_path):
     assert not sync.is_self_hosted(_make_root(tmp_path))
 

@@ -1980,6 +1980,13 @@ test("routing overlay: verify's merge is the loader's — objects key by key, an
   assert.deepEqual(mergeOverlay(base, overlay), { a: { b: 1, c: [3] }, d: [1], f: 1, g: { h: 2 } });
 });
 
+test("attach record: the standard running itself is not asked for the attach keys (A49)", () => {
+  assert.deepEqual(
+    recorded(TREE, (v) => v.checkAttachRecord()),
+    [],
+  );
+});
+
 // -- the record --------------------------------------------------------------------------------
 
 test("attach record: a TOML date in a version key is truthy and not a string — an invalid-version error, not a missing key", async () => {

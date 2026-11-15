@@ -321,7 +321,8 @@ scopes are deliberately different:
 The marked block begins at `## Dev layer — akmon` and ends before the next peer `##` heading or
 EOF. Imports are resolved transitively and the population is counted as a union, so an imported
 selected file is not counted twice. Vendor pointers, hook wiring, roles, pipelines, skills and
-on-demand documents are outside both scopes. Lines are `len(text.splitlines())`; bytes are
+on-demand documents are outside both scopes; the text the SessionStart hooks inject is inside both
+(the D-A49-HOOKCOUNT amendment below). Lines are `len(text.splitlines())`; bytes are
 `len(text.encode("utf-8"))`; member counts are summed with no synthetic separator.
 
 Each scope must satisfy both inclusive dimensions. Decimal bytes are normative: `12 KB` means
@@ -415,6 +416,35 @@ Each scope must satisfy both inclusive dimensions. Decimal bytes are normative: 
 > |---|---|---|
 > | akmon-shipped | `≤460 lines` and `≤28,800 bytes` | `self_ci`: error |
 > | consumer total | `≤710 lines` and `≤41,800 bytes` | `verify.py`: warn; exit 1 under `--strict` only |
+>
+> The consumer pair keeps its construction: the shipped pair plus 250 lines / 13,000 bytes.
+
+> **Amendment — D-A49-HOOKCOUNT, owner decision (a), task A49: the count includes the text the
+> SessionStart hooks inject.** A rule moved from an imported file into a hook still reaches the model
+> before it asks for anything, so counting files alone would book the move as a saving. Both scopes
+> now also hold the text of the hooks `bin/sync.json` wires on SessionStart — `session-start-agent`,
+> `model-routing` and `learning-reminder` — as members of the population, summed into the totals and
+> reported apart as `hooks=<bytes>` in the finding message. The wiring itself stays outside the scopes.
+>
+> The hook text is a **ceiling**, not the text of one session: every optional line is present (the
+> roster, delegation, work-style and memory lines; the stale-guardrail notice naming every materialized
+> file; the learning reminder as if due; the routing status with an empty second-opinion chain
+> and its warning, or the longest setup instruction). It is derived in-process, deterministically,
+> by the function the hook itself calls (`session_start_context`, `session_start_ceiling`,
+> `reminder_ceiling`), so no second copy of a text exists, and with the longest launcher spelling of the
+> routing command (mount, `akmon tool` or `npx akmon tool`), so both implementations count one number.
+> Nothing is read from the host, a transcript or a developer's local config, and nothing is written —
+> counting never records a session. The JavaScript twin builds the same text, and the conformance
+> corpus pins the two together.
+>
+> With the hooks the shipped population measures 470 lines and 31,172 bytes, of which the hooks are 14
+> lines and 2,649 bytes (the files alone are the 456 lines and 28,523 bytes of the previous amendment).
+> The caps keep the same headroom over the measure — 4 lines and about 240 bytes, rounded to a hundred.
+>
+> | scope | inclusive cap | checker and result |
+> |---|---|---|
+> | akmon-shipped | `≤474 lines` and `≤31,500 bytes` | `self_ci`: error |
+> | consumer total | `≤724 lines` and `≤44,500 bytes` | `verify.py`: warn; exit 1 under `--strict` only |
 >
 > The consumer pair keeps its construction: the shipped pair plus 250 lines / 13,000 bytes.
 

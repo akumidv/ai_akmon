@@ -174,13 +174,13 @@ def test_inclusive_byte_boundary(scope, delta, expected):
 def test_the_report_is_dynamic_in_every_field():
     cap = al.Cap(lines=10, bytes=100)
     base = al.Population(al.consumer(), (al.Member("m", "ab\ncd\n"),))
-    assert al.report(base, cap) == "consumer-total: lines=2/10 bytes=6/100"
+    assert al.report(base, cap) == "consumer-total: lines=2/10 bytes=6/100 hooks=0"
     line_only = al.Population(al.consumer(), (al.Member("m", "ab\n\nd\n"),))  # a byte became a newline
-    assert al.report(line_only, cap) == "consumer-total: lines=3/10 bytes=6/100"
+    assert al.report(line_only, cap) == "consumer-total: lines=3/10 bytes=6/100 hooks=0"
     byte_only = al.Population(al.consumer(), (al.Member("m", "abX\ncd\n"),))
-    assert al.report(byte_only, cap) == "consumer-total: lines=2/10 bytes=7/100"
-    assert al.report(base, al.Cap(lines=11, bytes=100)) == "consumer-total: lines=2/11 bytes=6/100"
-    assert al.report(base, al.Cap(lines=10, bytes=101)) == "consumer-total: lines=2/10 bytes=6/101"
+    assert al.report(byte_only, cap) == "consumer-total: lines=2/10 bytes=7/100 hooks=0"
+    assert al.report(base, al.Cap(lines=11, bytes=100)) == "consumer-total: lines=2/11 bytes=6/100 hooks=0"
+    assert al.report(base, al.Cap(lines=10, bytes=101)) == "consumer-total: lines=2/10 bytes=6/101 hooks=0"
 
 
 # --------------------------------------------------------------------------------------
@@ -255,7 +255,7 @@ def test_always_loaded_json_carries_the_ratchet():
     assert set(data) == {"block_heading", "scopes", "caps", "severity"}
     assert data["block_heading"] == "## Dev layer — akmon"
     assert data["scopes"] == ["akmon-shipped", "consumer-total"]
-    assert data["caps"]["akmon-shipped"] == {"lines": 460, "bytes": 28800}
+    assert data["caps"]["akmon-shipped"] == {"lines": 474, "bytes": 31500}
     assert data["severity"] == {"akmon-shipped": "error", "consumer-total": "warn"}
 
 
