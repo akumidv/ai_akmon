@@ -19,7 +19,8 @@ silent NaN). So, beyond the common owner-verify rule:
   implicit.
 - **Owner-verifies the math**, explicitly. Green tests are necessary, not sufficient.
 - **Cite the reference** for a formula or method (paper, textbook, standard) where one
-  exists.
+  exists. A math question to the owner first gathers how the industry does it
+  ([knowledge-lookup § Industry practice](../pipelines/knowledge-lookup.md#industry-practice-for-a-math-question)).
 
 ## Conventions must be explicit
 

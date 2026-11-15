@@ -4,11 +4,11 @@
   "caps": {
     "akmon-shipped": {
       "lines": 384,
-      "bytes": 25200
+      "bytes": 26000
     },
     "consumer-total": {
       "lines": 634,
-      "bytes": 38200
+      "bytes": 39000
     }
   },
   "severity": {

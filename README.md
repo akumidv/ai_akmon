@@ -171,7 +171,7 @@ tracked as **N1** in [meta/TASKS.md](https://github.com/akumidv/ai_akmon/blob/ma
 | [ARCHETYPES.md](ARCHETYPES.md) | the archetype taxonomy + per-archetype USAGE/requirement checklists |
 | [roles/](roles/) | the role definitions of the development agent: `review` · `architect` · `engineer` |
 | [agents/](agents/) | the agent definitions: `development` · `learning` · `release` (the learning and release agents define their `learn` and `release` modes there) |
-| [pipelines/](pipelines/) | how each role works: review-flow · design-flow · code-flow · pre-commit · release · tasks · the learn loop |
+| [pipelines/](pipelines/) | how each role works: review-flow · design-flow · code-flow · pre-commit · release · tasks · knowledge-lookup · the learn loop |
 | [guardrails/](guardrails/) | always-on hard rules for every project (`_common`) |
 | [profiles/](profiles/) | always-on language and environment profiles (`python`, `python-stdlib`, `js`), the checkable rules as standard linter configurations (`ruff.toml`, `oxlint.json`), and opt-in domain rules (`quant`, …) |
 | [skills/](skills/) | shared know-how any consuming project can use |

@@ -87,16 +87,24 @@ offered" and "branch for non-trivial work" are not machine-checked.
   implementation; record the accepted scope in a thematic ADR block. Verify the resulting
   implementation against that intent and its evidence, without requesting acceptance of
   unchanged design again. Passing tests and plausibility are necessary, not sufficient.
+- **Knowledge no source gives is gathered with the user; a math question to the owner first gathers
+  how the industry does it** ([knowledge-lookup](../pipelines/knowledge-lookup.md)).
 - **Owner decision requests (every role):** use stable **D-TOPIC** codes (**D-C139-TOPIC** when the
   request belongs to a task), following
   [design-flow § Decision requests](../pipelines/design-flow.md#decision-requests).
 - **A code in a reply to the owner carries its gist.** A task id (`C138`) or a decision code
   (`D-ORDER`) is followed by 3–5 words saying what it is — up to 10 for a complex task — and a verdict
   is stated as the action to take, not as a label.
-- **Narrate in the body, collect the asks at the end.** A reply that asks for or leaves pending an
-  owner action ends with one `Needed from you` block, grouped by what the owner must do, every line
-  carrying its own code, and nothing after it; a heading with the same code precedes the paragraph that argues
-  that question ([design-flow § Where requests sit in a reply](../pipelines/design-flow.md#where-requests-sit-in-a-reply)).
+- **Collect the asks at the end, each one decidable alone.** A reply that asks for or leaves pending
+  an owner action ends with one `Needed from you` block and nothing after it, grouped under `Decide`
+  and `Act`. Each request is one numbered item that decides correctly when read alone: its code and
+  gist, `Essence`, `Options` each with its cost and weak spot, `Recommendation` with its reason (or
+  marked short, with the full reasoning in the body), `After` when order matters. The body argues a
+  question, under a heading with its code, only when its reasoning does not fit the item or it is
+  asked again in a later message. No default: an unanswered item stays open; `all as recommended`
+  accepts the recommended decisions, never an action — a write, commit, push, release, run or supply
+  is closed only by its own code. A term new to the owner gets plain words
+  ([design-flow § Where requests sit in a reply](../pipelines/design-flow.md#where-requests-sit-in-a-reply)).
 
 ## Analysis before mutation
 

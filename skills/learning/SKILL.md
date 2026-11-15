@@ -64,8 +64,8 @@ Declare `🧭 role: learn — <focus>` before starting.
    Keep project-specific detail out of anything bound for akmon: knowledge flows one way up.
 
 4. **Present to the owner** in chat: the proposals with their evidence and landing place, ending in
-   one **`Needed from you`** block with a line per proposal (`D-LEARN-<TOPIC>` plus its gist) asking
-   keep / drop / change.
+   one **`Needed from you`** block with an item per proposal (`D-LEARN-<TOPIC>` plus its gist, in the
+   closing-block form of design-flow) asking keep / drop / change.
 
 5. **Persist only what the owner confirms** — write the confirmed memory notes, tasks and candidate
    records, and nothing else.

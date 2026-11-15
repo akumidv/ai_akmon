@@ -128,10 +128,51 @@ to it. Rules:
 | frontier digest (ids with gists, blockers, the next trunk step, ≤ N lines) | orchestrator | injection on demand, JSON sidecar | **yes** |
 | plan graph JSON, proposal diff | tool, orchestrator | file | read by the tool; the digest is cut from it |
 | console view: spine with ribs, goal × zone matrix, sessions table | owner | owner-only notice or a command | **no** |
+| status table: a chosen set of tasks, each with its state mark and what remains, and whose it is ([below](#the-status-table--a-report-variant-for-the-owner)) | owner | a command, or the orchestrator's reply in chat | only when the orchestrator renders it in a reply |
 
 The delivery route is measured, not assumed: M69 covers only the `UserPromptSubmit` owner-only
 notice; the statusline and Codex are open, and [N17](../../meta/TASKS.md) probes them in an attached
 consumer project, never in this repository.
+
+## The status table — a report variant for the owner
+
+The console view answers *where the plan goes*; the owner also asks *what is left* across several
+tasks at once — after a break, at the end of a day, before choosing what to hand out. That answer is
+a table, one row per task, and it is a report variant, not a second plan model: it reads the same
+graph and the same ergon folders.
+
+| Column | Content | Source |
+|---|---|---|
+| `#` | the id; neighbouring rows with the same state and the same remainder merge (`1–2`) | the task row |
+| Task | the node's label — a code is never shown alone | the label (D-FOCUS-LABEL) |
+| State | `☑` done · `◐` partly: something landed, something remains · `☐` not started; after the mark a short word on what landed (*merged*, *deployed*, *measured*) | task status and acceptance; the ergon's athlos folders and their results ([ADR 0028 D08](../adr/0028-park-and-resume-the-kit-and-the-dotted-layer.md): an athlos with no folder has not started) |
+| What remains | the unfinished athlos by label, the open decision codes, and **whose** each is: the owner's (a decision, a commit or carry, a run that spends the owner's tokens or needs the owner's access), the agent's, or people outside the project; `—` when nothing | the athlos lines without a result, the park note's `next` and its open codes |
+
+Rules:
+
+- **`☑` comes from task status and acceptance, never from the ledger** (N4), and never from a claim: a
+  part that was written but not verified keeps the row at `◐` and says so in *What remains*.
+- **The owner's share is visible on its own.** A row whose remainder is only the owner's says so at
+  the start of the cell, so the owner can read the column for their own work without reading the rest.
+- **One screen, no dates.** A set longer than the screen is cut at a whole row with the overflow
+  named, as in the view.
+- **The set is chosen, not the whole backlog:** the trunk of a goal, the athlos of one ergon, or the
+  ids the owner names (**D-A50-STATUS-SET**: which of these is the default).
+- **Code prints the skeleton** — ids, labels, marks, remaining athlos, codes, holders. The orchestrator
+  may rewrite the *What remains* prose in the owner's language when it renders the table in a reply;
+  it adds no state the skeleton lacks.
+- **One row has a depth view of its own:** the single-task recap (the task in plain words, what is
+  done — verified apart from claimed, where the tree stands, drift since the park note, `Needed from
+  you`, one next step). The table links a row to it and does not repeat it.
+
+Illustration, drawn from this design's own rows as the hand run would print them:
+
+| # | Task | State | What remains |
+|---|---|---|---|
+| A50 | plan view | ◐ design written | owner's: accept the ADR block after the hand run S1 |
+| N17 | delivery probe | ◐ one route measured (M69) | statusline and Codex routes, run in an attached consumer |
+| C152 | roadmap tool | ☐ | blocked after A50 is accepted |
+| A58, C154 | skill authoring, roadmap skill | ☐ | C154 blocked after C152 and A58; A58 waits on the skills walk |
 
 ## The picture: alternatives considered
 
@@ -236,5 +277,8 @@ branches                      ├── C153 annotation proposals ────�
 - **D-EDGE-FIELD** — whether a structured dependency field is ever added to the task row; not
   needed for the trunk, because the unparsed list measures how much the free-text parse misses.
 - **D-A59-REQ** — the requirements for the sessions branch.
+- **D-A50-STATUS-SET** — which set the [status table](#the-status-table--a-report-variant-for-the-owner)
+  covers when the owner names none: the trunk of the picked goal, the athlos of the active ergon, or
+  every active row with an ergon folder.
 - The answer-form conflict to settle in A58: C79's frontmatter rule asks for a result-first
   description, A56 point 3 for "Use this skill when…"; one form has to own it.

@@ -372,6 +372,22 @@ Each scope must satisfy both inclusive dimensions. Decimal bytes are normative: 
 > ratchet remains the thing that holds the shape: the new numbers are a ceiling for accepted
 > additions, not a target, and lowering it remains the later shrinking task's work.
 
+> **Amendment — D-A49-GUARD, owner-approved: the byte caps rise by 800 to carry the owner-request
+> rule in full.** The rule for requests to the owner — one closing block of items each decidable
+> alone, no default, `all as recommended` accepting decisions and never an action — governs the
+> developer's attention in every reply, so the owner chose to load it whole at session start rather
+> than as a pointer to design-flow, and to raise the cap now and optimize later; moving the
+> communication rules into a file of their own is an option for that later work (A49).
+>
+> | scope | inclusive cap | checker and result |
+> |---|---|---|
+> | akmon-shipped | `≤384 lines` and `≤26,000 bytes` | `self_ci`: error |
+> | consumer total | `≤634 lines` and `≤39,000 bytes` | `verify.py`: warn; exit 1 under `--strict` only |
+>
+> The line caps are unchanged. The consumer pair keeps its construction — the shipped pair plus the
+> hand-owned allowance of 250 lines / 13,000 bytes — so a consumer's own room does not shrink.
+> Everything else in the D-CAP amendment stands.
+
 Both checks emit the exact stable code `caps.always-loaded`. Their target distinguishes the scope,
 and the diagnostic reports that scope's measured line and byte counts beside both caps. Enforcement
 and rendering use the same counters; stale or hard-coded output is a contract failure.

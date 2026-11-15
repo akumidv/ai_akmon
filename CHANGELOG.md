@@ -30,6 +30,15 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   your ignore list.
 
 ### Added
+- **Knowledge lookup: gather with the user what no source gives; industry practice before a math question (C206).**
+  A new pipeline, `pipelines/knowledge-lookup.md`, linked from the common guardrail: knowledge comes
+  from the project's records, then documentation, then the ordinary web request; what a bot check or a
+  sign-in keeps from it is gathered with the user in the `akmon-browser` shared window (or pasted by
+  the user), never around a site's bot check or terms of use, and recorded with its source. On the
+  user's request the agent opens the project's Chrome; each project keeps its own. A math question
+  to the owner first gathers the established approaches with their sources and the project's current
+  one; each option says who does it that way, a departure from common practice says why, an approach
+  with no source is named unconfirmed. The `akmon-browser` skill and the `quant` profile link it.
 - **The work style: `delegating` or `controlling` (C203, [ADR-0031/D03](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0031-work-styles-delegating-and-controlling.md)).**
   The first valid of: the owner typing `/style delegating|controlling` (a new `work-style`
   `UserPromptSubmit` hook, wired by `akmon sync` for Claude and Codex, stores it per session in

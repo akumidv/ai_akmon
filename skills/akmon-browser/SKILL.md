@@ -1,6 +1,6 @@
 ---
 name: akmon-browser
-description: Lets the agent work in a real Chrome it shares with the user — the user signs in (SSO, MFA), the agent reads, navigates and, in joint work, takes one step the user confirmed while watching — through one Chrome per project, with the pinned chrome-devtools MCP server or the `akmon tool browser` verbs. Use when a web resource has no API or no token, when the user is signed in in a browser and the agent should read what they see, or when the user asks to open, drive or debug a page in Chrome.
+description: Lets the agent work in a real Chrome it shares with the user — the user signs in (SSO, MFA), the agent reads, navigates and, in joint work, takes one step the user confirmed while watching — through one Chrome per project, with the pinned chrome-devtools MCP server or the `akmon tool browser` verbs. Use when a web resource has no API or no token, when the user is signed in in a browser and the agent should read what they see, when knowledge the work needs sits behind a bot check or a sign-in and is gathered with the user, or when the user asks to open, drive or debug a page in Chrome.
 metadata:
   owner: akmon
 ---
@@ -20,6 +20,10 @@ missing.
 Commands are spelled `akmon tool browser <verb>` (`npx akmon tool browser <verb>` in a Node project).
 The scaffold for the project's settings and the consent wording is in
 [`references/shared-window.md`](references/shared-window.md).
+
+It is also how knowledge the ordinary web request is refused is gathered **with** the user — the
+route, its limits and where the result is recorded are in
+[knowledge-lookup § When no source has it](../../pipelines/knowledge-lookup.md#when-no-source-has-it--gather-it-with-the-user).
 
 ## When not to use it
 
@@ -161,6 +165,9 @@ and production builds are in [`references/extension.md`](references/extension.md
   process runs with **this project's profile**. Another project's Chrome, or one akmon did not start,
   is refused with a message naming whose it is.
 - A site may flag automated interaction: pace the steps, and do not loop on a live account.
+- **Beside the user, not around a site.** The shared window does not get around a site's bot check
+  or its terms of use: where a site blocks automation or its terms forbid automated reading, the user
+  reads the page and the agent works from what the user passes on.
 
 ## Troubleshooting
 
