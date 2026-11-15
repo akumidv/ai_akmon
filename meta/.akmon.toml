@@ -7,4 +7,8 @@ runner = "uv run pytest"
 [check]
 lint = "uv run ruff check {files}"
 format = "uv run ruff format --check {files}"
+# self_ci takes its change set from git itself — staged, unstaged and untracked paths, `meta/` included,
+# which `{files}` never carries (`akmon check --changed` drops the dev layer) — so the command has no
+# `{files}` and runs the same under `akmon check` and `--changed`. A clean tree is a full run;
+# `--full` forces every leg, and `fuzz` and `corpus-node` run only then (meta/self_ci_legs.json).
 self-ci = "python3 meta/self_ci.py"

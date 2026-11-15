@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Run akmon's self-checks against a synthetic consuming-project fixture.
 
+Only the legs the changed paths can affect run (``self_ci_legs.json`` says what each leg reads;
+``self_ci_legs.py`` selects). With no argument the changed paths come from git — staged, unstaged and
+untracked, ``meta/`` included — and a clean tree is a full run; paths as arguments name them instead;
+``--full``, or ``.``, runs every leg. The slowest legs (``full_only`` in the table: ``fuzz`` and
+``corpus-node``) run only in a full run, which CI makes explicit with ``--full``.
+
 Each leg — the fixture ``sync`` write, the ``sync --check`` re-run, the USE-layer
 ``verify --strict``, the installed-wheel smoke, and the npm smoke with no Python on ``PATH``
 (C106) — reports through the shared finding envelope (``common/findings.py``), imported
@@ -31,6 +37,7 @@ sys.path.insert(0, str(_AKMON_ROOT / "bin"))
 sys.path.insert(0, str(_AKMON_ROOT))
 sys.path.insert(0, str(_AKMON_ROOT / "meta"))
 
+import self_ci_legs  # noqa: E402
 import verify as verify_tool  # noqa: E402
 from checks import always_loaded as always_loaded_caps  # noqa: E402
 from checks import canary, capabilities, decision_records  # noqa: E402
@@ -748,100 +755,135 @@ def fuzz_budget(depth: str) -> tuple[int, int]:
     return cases, secrets.randbelow(2**31) if seed is None else seed
 
 
-def _run(akmon_root: Path, fuzz_depth: str = "bounded") -> list[Finding]:
-    findings: list[Finding] = []
-    with (
-        tempfile.TemporaryDirectory(prefix="akmon-self-ci-") as tmp,
-        tempfile.TemporaryDirectory(prefix="akmon-self-ci-path-") as path_scratch,
-    ):
-        fixture = Path(tmp)
-        # Outside the fixture: the shadow PATH directories are not part of the consumer tree.
-        verify_env = _codex_free_env(Path(path_scratch))
-        _make_fixture(fixture, akmon_root)
-        mounted_bin = fixture / "_aitna" / "akmon" / "bin"
-        sync_py = str(mounted_bin / "sync.py")
-        verify_py = str(mounted_bin / "verify.py")
-        # Ordered and short-circuiting: a fixture that will not sync tells us nothing about
-        # what `verify` would have said, so the first red leg is the whole answer.
-        healthy = (
-            _leg(
-                findings,
-                "fixture sync",
-                LegInvocation([sys.executable, sync_py, "--project-root", str(fixture)]),
-                code="selfci.fixture-sync",
-                fixes=LegFixes(
-                    ok_fix="Keep fixture sync able to materialize every generated artifact.",
-                    error_fix="Run python3 meta/self_ci.py and fix the sync failure it reports.",
-                ),
-            )
-            and _leg(
-                findings,
-                "fixture sync --check",
-                LegInvocation([sys.executable, sync_py, "--project-root", str(fixture), "--check"]),
-                code="selfci.fixture-sync-check",
-                fixes=LegFixes(
-                    ok_fix="Keep sync idempotent so a second run reports no drift.",
-                    error_fix="Make sync idempotent so a second run reports no drift.",
-                ),
-            )
-            and _leg(
-                findings,
-                "fixture verify --strict",
-                LegInvocation(
-                    [sys.executable, verify_py, "--project-root", str(fixture), "--strict", "--quiet"],
-                    # This synthetic fixture never runs the live Codex `/hooks` owner-approval flow C70
-                    # checks for; Codex is hidden from PATH so the check takes its absent-install skip
-                    # (see the matching note on the wheel smoke).
-                    env=verify_env,
-                ),
-                code="selfci.fixture-verify",
-                fixes=LegFixes(
-                    ok_fix="Keep the synthetic consumer compliant with the USE contract.",
-                    error_fix="Fix the USE-contract finding the fixture verify reports.",
-                ),
+#: Every leg `_run` can skip, in run order. ``meta/self_ci_legs.json`` declares what each one reads
+#: (a test pins the two together), so a leg added here without its inputs fails that test.
+LEG_IDS = (
+    "fixture",
+    "wheel-smoke",
+    "npm-smoke",
+    "always-loaded",
+    "capabilities",
+    "canary",
+    "decision-records",
+    "runtime",
+    "corpus",
+    "js-deps",
+    "js-typecheck",
+    "js-unit",
+    "js-lint",
+    "js-format",
+    "corpus-node",
+    "fuzz",
+)
+
+
+def _fixture_legs(findings: list[Finding], akmon_root: Path, fixture: Path, verify_env: dict[str, str]) -> bool:
+    """The fixture chain: sync, sync --check, then the USE-layer verify; ``True`` while it stays green."""
+    _make_fixture(fixture, akmon_root)
+    mounted_bin = fixture / "_aitna" / "akmon" / "bin"
+    sync_py = str(mounted_bin / "sync.py")
+    verify_py = str(mounted_bin / "verify.py")
+    # Ordered and short-circuiting: a fixture that will not sync tells us nothing about
+    # what `verify` would have said, so the first red leg is the whole answer.
+    return (
+        _leg(
+            findings,
+            "fixture sync",
+            LegInvocation([sys.executable, sync_py, "--project-root", str(fixture)]),
+            code="selfci.fixture-sync",
+            fixes=LegFixes(
+                ok_fix="Keep fixture sync able to materialize every generated artifact.",
+                error_fix="Run python3 meta/self_ci.py and fix the sync failure it reports.",
+            ),
+        )
+        and _leg(
+            findings,
+            "fixture sync --check",
+            LegInvocation([sys.executable, sync_py, "--project-root", str(fixture), "--check"]),
+            code="selfci.fixture-sync-check",
+            fixes=LegFixes(
+                ok_fix="Keep sync idempotent so a second run reports no drift.",
+                error_fix="Make sync idempotent so a second run reports no drift.",
+            ),
+        )
+        and _leg(
+            findings,
+            "fixture verify --strict",
+            LegInvocation(
+                [sys.executable, verify_py, "--project-root", str(fixture), "--strict", "--quiet"],
+                # This synthetic fixture never runs the live Codex `/hooks` owner-approval flow C70
+                # checks for; Codex is hidden from PATH so the check takes its absent-install skip
+                # (see the matching note on the wheel smoke).
+                env=verify_env,
+            ),
+            code="selfci.fixture-verify",
+            fixes=LegFixes(
+                ok_fix="Keep the synthetic consumer compliant with the USE contract.",
+                error_fix="Fix the USE-contract finding the fixture verify reports.",
+            ),
+        )
+    )
+
+
+def _wheel_leg(findings: list[Finding], akmon_root: Path, fixture: Path, verify_env: dict[str, str]) -> None:
+    """The installed-wheel smoke, recorded as one finding."""
+    try:
+        _installed_wheel_smoke(akmon_root, fixture / "wheel-smoke", verify_env)
+    except Exception as exc:  # noqa: BLE001 — the leg owns build, install, attach and hook execution
+        detail = " ".join(str(exc).split()) or type(exc).__name__
+        message, fix = _wheel_smoke_report(detail)
+        findings.append(Finding("error", "selfci.wheel-smoke", message, "", fix))
+    else:
+        findings.append(
+            Finding(
+                "ok",
+                "selfci.wheel-smoke",
+                "installed-wheel smoke passes (build, install, init, sync, verify, hook)",
+                "",
+                "Keep the packaged install green before every release.",
             )
         )
-        if not healthy:
-            return findings
-        try:
-            _installed_wheel_smoke(akmon_root, fixture / "wheel-smoke", verify_env)
-        except Exception as exc:  # noqa: BLE001 — the leg owns build, install, attach and hook execution
-            detail = " ".join(str(exc).split()) or type(exc).__name__
-            message, fix = _wheel_smoke_report(detail)
-            findings.append(Finding("error", "selfci.wheel-smoke", message, "", fix))
-        else:
-            findings.append(
-                Finding(
-                    "ok",
-                    "selfci.wheel-smoke",
-                    "installed-wheel smoke passes (build, install, init, sync, verify, hook)",
-                    "",
-                    "Keep the packaged install green before every release.",
-                )
+
+
+def _npm_leg(findings: list[Finding], akmon_root: Path, fixture: Path, verify_env: dict[str, str]) -> None:
+    """The npm smoke with no Python on ``PATH``, recorded as one finding."""
+    try:
+        _installed_npm_smoke(akmon_root, fixture / "npm-smoke", verify_env)
+    except Exception as exc:  # noqa: BLE001 — the leg owns pack, install, attach and hook execution
+        detail = " ".join(str(exc).split()) or type(exc).__name__
+        message, fix = _npm_smoke_report(detail)
+        findings.append(Finding("error", "selfci.npm-smoke", message, "", fix))
+    else:
+        findings.append(
+            Finding(
+                "ok",
+                "selfci.npm-smoke",
+                "npm smoke passes with python3 hidden (pack, install, init, sync, verify, hook)",
+                "",
+                "Keep the Python-free Node install green before every release.",
             )
-        try:
-            _installed_npm_smoke(akmon_root, fixture / "npm-smoke", verify_env)
-        except Exception as exc:  # noqa: BLE001 — the leg owns pack, install, attach and hook execution
-            detail = " ".join(str(exc).split()) or type(exc).__name__
-            message, fix = _npm_smoke_report(detail)
-            findings.append(Finding("error", "selfci.npm-smoke", message, "", fix))
-        else:
-            findings.append(
-                Finding(
-                    "ok",
-                    "selfci.npm-smoke",
-                    "npm smoke passes with python3 hidden (pack, install, init, sync, verify, hook)",
-                    "",
-                    "Keep the Python-free Node install green before every release.",
-                )
-            )
-    # Akmon's own declarations, checked against akmon's own tree rather than the fixture: the
-    # capability matrix is a property of what akmon ships, not of a synthetic consumer's use of it.
-    findings.extend(always_loaded_caps.check_always_loaded(akmon_root))
-    findings.extend(capabilities.check_capabilities(akmon_root))
-    findings.extend(canary.check_canary(akmon_root))
-    findings.extend(decision_records.check_decision_records(akmon_root))
-    findings.extend(runtime_checks.check_declared_runtimes(akmon_root))
+        )
+
+
+def _own_checks(findings: list[Finding], akmon_root: Path, selected: frozenset[str]) -> None:
+    """Akmon's own declarations, checked against akmon's own tree rather than the fixture.
+
+    The capability matrix is a property of what akmon ships, not of a synthetic consumer's use of it.
+    """
+    if "always-loaded" in selected:
+        findings.extend(always_loaded_caps.check_always_loaded(akmon_root))
+    if "capabilities" in selected:
+        findings.extend(capabilities.check_capabilities(akmon_root))
+    if "canary" in selected:
+        findings.extend(canary.check_canary(akmon_root))
+    if "decision-records" in selected:
+        findings.extend(decision_records.check_decision_records(akmon_root))
+    if "runtime" in selected:
+        findings.extend(runtime_checks.check_declared_runtimes(akmon_root))
+
+
+def _corpus_leg(findings: list[Finding], akmon_root: Path) -> None:
+    """The Python implementation against the conformance corpus."""
     # The conformance corpus (C101): the language-neutral spec both implementations pass,
     # run against the Python implementation plus its coverage gate. The leg is independent of
     # the fixture chain on purpose: a corpus failure must not hide the fixture findings, and
@@ -861,98 +903,114 @@ def _run(akmon_root: Path, fuzz_depth: str = "bounded") -> list[Finding]:
             ),
         ),
     )
+
+
+def _node_legs(findings: list[Finding], akmon_root: Path, selected: frozenset[str]) -> None:
+    """The node toolchain legs and the node corpus (C103, ADR 0020 D03), independent of each other."""
     # The node toolchain (C103, ADR 0020 D03): the JS implementation's own checks, appended
     # after the conformance leg and independent of each other the same way — a red leg records
     # its finding (naming the prerequisite when that is what failed) and the rest still run.
-    _js_leg(
-        findings,
-        "js deps (npm ci)",
-        LegInvocation(["npm", "ci", "--ignore-scripts"], cwd=akmon_root),
-        code="selfci.js-deps",
-        fixes=LegFixes(
-            ok_fix="Keep the committed dev lockfile in sync with package.json's exact-pinned devDependencies.",
-            error_fix="Run npm ci --ignore-scripts at the repository root and fix the install failure it reports.",
-        ),
-    )
-    _js_leg(
-        findings,
-        "js typecheck (tsc --checkJs)",
-        LegInvocation(["npx", "--no-install", "tsc", "--checkJs", "--noEmit", "-p", "."], cwd=akmon_root),
-        code="selfci.js-typecheck",
-        fixes=LegFixes(
-            ok_fix="Keep the JSDoc-annotated js/ implementation type-clean.",
-            error_fix=(
-                "Run npx --no-install tsc --checkJs --noEmit at the repository root and fix the type errors it reports."
+    if "js-deps" in selected:
+        _js_leg(
+            findings,
+            "js deps (npm ci)",
+            LegInvocation(["npm", "ci", "--ignore-scripts"], cwd=akmon_root),
+            code="selfci.js-deps",
+            fixes=LegFixes(
+                ok_fix="Keep the committed dev lockfile in sync with package.json's exact-pinned devDependencies.",
+                error_fix="Run npm ci --ignore-scripts at the repository root and fix the install failure it reports.",
             ),
-        ),
-    )
-    _js_leg(
-        findings,
-        "js unit tests (node --test js/**/*.test.mjs)",
-        LegInvocation(["node", "--test", "js/**/*.test.mjs"], cwd=akmon_root),
-        code="selfci.js-unit",
-        fixes=LegFixes(
-            ok_fix="Keep the js/ tests green.",
-            error_fix="Run node --test 'js/**/*.test.mjs' and fix the failing test it names.",
-        ),
-    )
-    _js_leg(
-        findings,
-        "js lint (oxlint)",
-        LegInvocation(["npx", "--no-install", "oxlint", "."], cwd=akmon_root),
-        code="selfci.js-lint",
-        fixes=LegFixes(
-            ok_fix="Keep the repository oxlint-clean under akmon's own ruleset (profiles/oxlint.json).",
-            error_fix="Run npx --no-install oxlint at the repository root and fix the lint errors it reports.",
-        ),
-    )
-    _js_leg(
-        findings,
-        "js format (oxfmt)",
-        LegInvocation(["npx", "--no-install", "oxfmt", "--check", "."], cwd=akmon_root),
-        code="selfci.js-format",
-        fixes=LegFixes(
-            ok_fix="Keep the JS sources formatted with oxfmt.",
-            error_fix=(
-                "Run npx --no-install oxfmt at the repository root to format the JS sources, then review the diff."
+        )
+    if "js-typecheck" in selected:
+        _js_leg(
+            findings,
+            "js typecheck (tsc --checkJs)",
+            LegInvocation(["npx", "--no-install", "tsc", "--checkJs", "--noEmit", "-p", "."], cwd=akmon_root),
+            code="selfci.js-typecheck",
+            fixes=LegFixes(
+                ok_fix="Keep the JSDoc-annotated js/ implementation type-clean.",
+                error_fix=(
+                    "Run npx --no-install tsc --checkJs --noEmit at the repository root "
+                    "and fix the type errors it reports."
+                ),
             ),
-        ),
-    )
-    _js_leg(
-        findings,
-        "conformance corpus (node units, hooks, cli and tools)",
-        LegInvocation(
-            [
-                sys.executable,
-                str(akmon_root / "meta" / "conformance" / "runner.py"),
-                "--tree",
-                str(akmon_root),
-                "--impl",
-                "node",
-                "--area",
-                "units",
-                "--area",
-                "hooks",
-                "--area",
-                "cli",
-                "--area",
-                "tools",
-            ],
-            cwd=akmon_root,
-        ),
-        code="selfci.corpus-node",
-        fixes=LegFixes(
-            ok_fix=(
-                "Keep the unit tables green on the node implementation through probe.mjs, every hook "
-                "scenario green on the JS hooks run from node_modules/akmon, and every CLI scenario of a "
-                "command with a JS port green on the JS CLI, and every scenario of a ported tool green on its JS twin."
+        )
+    if "js-unit" in selected:
+        _js_leg(
+            findings,
+            "js unit tests (node --test js/**/*.test.mjs)",
+            LegInvocation(["node", "--test", "js/**/*.test.mjs"], cwd=akmon_root),
+            code="selfci.js-unit",
+            fixes=LegFixes(
+                ok_fix="Keep the js/ tests green.",
+                error_fix="Run node --test 'js/**/*.test.mjs' and fix the failing test it names.",
             ),
-            error_fix=(
-                "Run python3 meta/conformance/runner.py --tree <repo> --impl node --area units --area hooks "
-                "--area cli --area tools and fix the prerequisite or the failing scenario it names."
+        )
+    if "js-lint" in selected:
+        _js_leg(
+            findings,
+            "js lint (oxlint)",
+            LegInvocation(["npx", "--no-install", "oxlint", "."], cwd=akmon_root),
+            code="selfci.js-lint",
+            fixes=LegFixes(
+                ok_fix="Keep the repository oxlint-clean under akmon's own ruleset (profiles/oxlint.json).",
+                error_fix="Run npx --no-install oxlint at the repository root and fix the lint errors it reports.",
             ),
-        ),
-    )
+        )
+    if "js-format" in selected:
+        _js_leg(
+            findings,
+            "js format (oxfmt)",
+            LegInvocation(["npx", "--no-install", "oxfmt", "--check", "."], cwd=akmon_root),
+            code="selfci.js-format",
+            fixes=LegFixes(
+                ok_fix="Keep the JS sources formatted with oxfmt.",
+                error_fix=(
+                    "Run npx --no-install oxfmt at the repository root to format the JS sources, then review the diff."
+                ),
+            ),
+        )
+    if "corpus-node" in selected:
+        _js_leg(
+            findings,
+            "conformance corpus (node units, hooks, cli and tools)",
+            LegInvocation(
+                [
+                    sys.executable,
+                    str(akmon_root / "meta" / "conformance" / "runner.py"),
+                    "--tree",
+                    str(akmon_root),
+                    "--impl",
+                    "node",
+                    "--area",
+                    "units",
+                    "--area",
+                    "hooks",
+                    "--area",
+                    "cli",
+                    "--area",
+                    "tools",
+                ],
+                cwd=akmon_root,
+            ),
+            code="selfci.corpus-node",
+            fixes=LegFixes(
+                ok_fix=(
+                    "Keep the unit tables green on the node implementation through probe.mjs, every hook "
+                    "scenario green on the JS hooks run from node_modules/akmon, and every CLI scenario of a "
+                    "command with a JS port green on the JS CLI, and every scenario of a ported tool green "
+                    "on its JS twin."
+                ),
+                error_fix=(
+                    "Run python3 meta/conformance/runner.py --tree <repo> --impl node --area units --area hooks "
+                    "--area cli --area tools and fix the prerequisite or the failing scenario it names."
+                ),
+            ),
+        )
+
+
+def _fuzz_leg(findings: list[Finding], akmon_root: Path, fuzz_depth: str) -> None:
+    """The differential hook fuzz, bounded for self-CI and deep for the release check."""
     # Differential fuzzing (C111, design node-consumers.md §5 gate 4): every hook scenario's payload,
     # mutated, through both implementations. Bounded by default (a fixed seed, so a red leg is
     # reproducible as is); the release check asks for the deep run, whose fresh seed the label carries.
@@ -981,11 +1039,37 @@ def _run(akmon_root: Path, fuzz_depth: str = "bounded") -> list[Finding]:
             ),
         ),
     )
+
+
+def _run(akmon_root: Path, fuzz_depth: str = "bounded", selected: frozenset[str] = frozenset(LEG_IDS)) -> list[Finding]:
+    """The legs in ``selected`` against akmon's own tree, in run order; a red fixture chain ends the run."""
+    findings: list[Finding] = []
+    with (
+        tempfile.TemporaryDirectory(prefix="akmon-self-ci-") as tmp,
+        tempfile.TemporaryDirectory(prefix="akmon-self-ci-path-") as path_scratch,
+    ):
+        fixture = Path(tmp)
+        # Outside the fixture: the shadow PATH directories are not part of the consumer tree.
+        verify_env = _codex_free_env(Path(path_scratch))
+        if "fixture" in selected and not _fixture_legs(findings, akmon_root, fixture, verify_env):
+            return findings
+        if "wheel-smoke" in selected:
+            _wheel_leg(findings, akmon_root, fixture, verify_env)
+        if "npm-smoke" in selected:
+            _npm_leg(findings, akmon_root, fixture, verify_env)
+    _own_checks(findings, akmon_root, selected)
+    # The conformance corpus (C101) is independent of the fixture chain on purpose: a corpus failure must
+    # not hide the fixture findings, and the fixture's health says nothing about the corpus.
+    if "corpus" in selected:
+        _corpus_leg(findings, akmon_root)
+    _node_legs(findings, akmon_root, selected)
+    if "fuzz" in selected:
+        _fuzz_leg(findings, akmon_root, fuzz_depth)
     return findings
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run every self-CI leg against akmon's own tree and print the findings."""
+    """Run the self-CI legs the changed paths can affect (all without paths) and print the findings."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strict", action="store_true", help="Treat warnings as failures.")
     parser.add_argument("--quiet", action="store_true", help="Only print warnings and errors.")
@@ -995,9 +1079,31 @@ def main(argv: list[str] | None = None) -> int:
         default="bounded",
         help="the differential fuzz leg's budget: bounded (self-CI) or release (the release check's deep run)",
     )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="run every leg, the slow full_only ones included (what CI runs); not with paths",
+    )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        help="the changed paths: only the legs that read them run, the full_only legs deferred; "
+        "none reads them from git (a clean tree is a full run), `.` runs every leg",
+    )
     args = parser.parse_args(argv)
+    if args.full and args.paths:
+        parser.error("--full runs every leg, so it takes no paths")
 
-    findings = _run(_AKMON_ROOT, args.fuzz_depth)
+    try:
+        change_set = self_ci_legs.resolve_change_set(_AKMON_ROOT, args.paths, full=args.full)
+    except self_ci_legs.ChangeSetError as exc:
+        raise SystemExit(f"self-ci: cannot read the change set from git: {exc}") from exc
+    selection = self_ci_legs.read_leg_table().select(change_set.paths, defer_full_only=change_set.paths is not None)
+    # Always printed, `--quiet` included: a skipped or deferred leg is stated, never silent.
+    print(f"self-ci: change set: {change_set.source}")
+    for line in self_ci_legs.report_lines(selection):
+        print(line)
+    findings = _run(_AKMON_ROOT, args.fuzz_depth, selection.legs)
     print_findings(findings, quiet=args.quiet)
     return exit_code(findings, strict=args.strict)
 

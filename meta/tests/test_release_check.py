@@ -59,7 +59,7 @@ def test_akmon_check_runs_only_upstream_gates(monkeypatch, tmp_path):
     assert captured == {
         "root": release_check.AKMON_ROOT,
         "commands": [
-            [sys.executable, str(release_check.META / "self_ci.py"), "--fuzz-depth", "release"],
+            [sys.executable, str(release_check.META / "self_ci.py"), "--full", "--fuzz-depth", "release"],
             pytest_command,
         ],
     }

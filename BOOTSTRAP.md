@@ -233,12 +233,14 @@ This project uses the akmon dev layer. Model & notation:
   [release](_aitna/agents/release/README.md) charters, one per agent. **Declare the active role**
   before doing work and restate it on switch (`🧭 role: <name> — <focus>`) — see
   [Role declaration](_aitna/akmon/roles/README.md#role-declaration-announce-the-active-role).
-- **Delegation (always-on, direct):** **delegation is the default.** For every non-trivial
-  task, before the first repository sweep, edit, or test run, decompose the work and delegate
-  every independent mechanical sub-step to available subagents without waiting for an owner
-  prompt. The orchestrator retains decomposition, routing, synthesis, and owner dialogue. Skip
-  only when the task is atomic or the harness exposes no subagents; state the reason. This clause
-  is direct because Codex does not expand nested `@` imports in `AGENTS.md`.
+- **Delegation (always-on, direct — Codex does not expand nested `@` imports):** **delegation is the default:**
+  for every non-trivial task, before the first repository sweep, edit, or test run, decompose the work and
+  delegate every independent mechanical sub-step to available subagents without waiting for an owner
+  prompt, keeping only decomposition, routing, synthesis and owner dialogue; skip only when the task is
+  atomic or the harness exposes no subagents, and state the reason. **The work style** sets the rest:
+  *delegating* also hands whole athla and higher-tier calls to delegates; *controlling* leaves stages to
+  sessions the developer starts and recommends which higher-tier call, for what and why, with a
+  delegate's brief in the developer's language.
 - **Guardrails and profiles (always-on):** the common guardrail and the project's language
   profile are **imported** (not just linked) so their rules load at session start; akmon is
   the single owner — do not restate them here. Put each `@`-import on its own line,

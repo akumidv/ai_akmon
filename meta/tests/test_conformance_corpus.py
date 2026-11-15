@@ -640,7 +640,7 @@ def test_every_unit_table_is_held_to_the_python_reference():
             assert scenario.expected.stdout.startswith('{\n  "ok": true,\n'), scenario.id
             assert scenario.expected.stdout.endswith('  "failed": []\n}\n'), scenario.id
     leg = 'str(akmon_root / "meta" / "conformance" / "runner.py"), "--tree", str(akmon_root)]'
-    assert leg in inspect.getsource(self_ci._run)
+    assert leg in inspect.getsource(self_ci._corpus_leg)
 
 
 def _round_trip(tmp_path, scenario, exit_code, stdout, stderr):

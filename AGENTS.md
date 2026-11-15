@@ -110,4 +110,8 @@ with `akmon check` and the tests with the runner, as the [pre-commit](pipelines/
 pipeline says. `meta/self_ci.py` is one of those checks: it builds and installs the wheel and runs
 the JavaScript legs (`tsc`, `node --test`, `oxlint`, `oxfmt`), and its finding names a missing
 prerequisite (`node` and `npm`, registry reach, a git credential helper outside the checkout)
-instead of a bare exit status.
+instead of a bare exit status. It takes its change set from git itself — staged, unstaged and
+untracked paths, `meta/` included — and runs only the legs those paths can affect
+(`meta/self_ci_legs.json`; an unknown path runs them all), so the pre-commit run is partial. A clean
+tree, `--full` and CI (`--full`, explicit) run every leg; `fuzz` and the node corpus (`full_only` in
+the table) run only in a full run and are named as deferred otherwise.

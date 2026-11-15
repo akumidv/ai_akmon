@@ -421,7 +421,7 @@ def test_the_self_ci_leg_is_bounded_and_the_release_depth_draws_a_fresh_seed():
     assert self_ci.fuzz_budget("bounded") == (120, 0)
     cases, seed = self_ci.fuzz_budget("release")
     assert cases == 2000 and 0 <= seed < 2**31
-    source = inspect.getsource(self_ci._run)
+    source = inspect.getsource(self_ci._fuzz_leg)
     assert 'code="selfci.fuzz"' in source
     assert '"fuzz.py"' in source
 

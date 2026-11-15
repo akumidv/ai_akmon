@@ -40,5 +40,7 @@ jobs:
       - name: Tests
         run: uv run pytest meta/tests -m "not docker"
 
+      # `--full`: every leg, the slow `full_only` ones (fuzz, the node corpus) included, whatever the
+      # checkout looks like; without it self-CI derives its legs from the tree's changes.
       - name: Self CI (synthetic consumer fixture)
-        run: uv run python meta/self_ci.py
+        run: uv run python meta/self_ci.py --full

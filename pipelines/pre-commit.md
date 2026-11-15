@@ -47,9 +47,10 @@ on every project regardless of role.
 
 ## Per-project specifics
 
-The concrete commands (test runner, linter, type checker) come from the project's `AGENTS.md`
-and its language profile in [profiles/](../profiles/). This pipeline defines the **gate**;
-the project supplies the **commands**.
+The concrete commands (test runner, linter, type checker) come from the project record's
+`[test].runner` and `[check]` (`<dev root>/.akmon.toml`), and from the project's `AGENTS.md` and its
+language profile in [profiles/](../profiles/) only where the record names none. This pipeline
+defines the **gate**; the project supplies the **commands**.
 
 ## Done
 

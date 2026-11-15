@@ -256,7 +256,7 @@ both implementations instead of `python3 $(akmon path)/tools/<tool>.py`.
 
    Budgets: `selfci.fuzz` runs the bounded leg, 120 cases at seed 0 (about 45 s on a 4-core host;
    every kind is the primary of at least six cases). `release_check --check` runs `self_ci.py
-   --fuzz-depth release`: 2 000 cases at a fresh seed, which the leg's finding prints so a failure
+   --full --fuzz-depth release`: 2 000 cases at a fresh seed, which the leg's finding prints so a failure
    reproduces. `--jobs` (default: up to 4) runs seeds in parallel, each seed in one worker;
    `--time-budget SEC` stops starting cases after that long and reports how many it left unrun.
    The run needs `node` on PATH and names it when it is missing (exit 2).
@@ -297,6 +297,6 @@ the wheel smoke: `selfci.js-deps` (`npm ci --ignore-scripts`), `selfci.js-typech
 `selfci.js-lint` (`npx --no-install oxlint .`) and `selfci.js-format` (`npx --no-install oxfmt --check .`).
 
 `selfci.fuzz` (C111) runs `fuzz.py --cases 120 --seed 0`, the bounded differential fuzz of gate 4;
-`python3 meta/self_ci.py --fuzz-depth release` (what `release_check --check` runs) makes it 2 000
+`python3 meta/self_ci.py --full --fuzz-depth release` (what `release_check --check` runs) makes it 2 000
 cases at a fresh seed, printed in the leg's label. The leg is pinned by
 `meta/tests/test_conformance_fuzz.py`.

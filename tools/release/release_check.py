@@ -779,7 +779,8 @@ def run_check(root: Path, subject: str) -> int:
     if subject == "akmon":
         commands = [
             # The release depth of the differential hook fuzz (C111): many more cases than self-CI's bounded leg.
-            [sys.executable, str(META / "self_ci.py"), "--fuzz-depth", "release"],
+            # `--full`: a release is checked whole, whatever the tree's changes would select.
+            [sys.executable, str(META / "self_ci.py"), "--full", "--fuzz-depth", "release"],
             _pytest_command(AKMON_ROOT, str(META / "tests")),
         ]
         failed = _run_commands(AKMON_ROOT, commands)

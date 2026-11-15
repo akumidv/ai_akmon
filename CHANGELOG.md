@@ -231,7 +231,12 @@ they bump the pin. Convention ([ADR 0001](https://github.com/akumidv/ai_akmon/bl
   false saving; the consumer cap rises by that share, with nothing to do on your side.
   akmon's own gates are declared in its record (`meta/.akmon.toml`: `[test].runner`, `[check]`), so
   `akmon check` runs them and `akmon verify` no longer asks the standard running itself for the attach
-  keys; nothing changes for a consumer.
+  keys; nothing changes for a consumer. `pipelines/pre-commit.md` now says the concrete commands come
+  from the project record's `[test].runner` and `[check]` (`<dev root>/.akmon.toml`), and from the
+  project's `AGENTS.md` only where the record names none.
+  akmon's own self-CI now takes its change set from git and defers its two slowest legs to the full run
+  and CI, an akmon-only change; the one shipped file touched is `BOOTSTRAP.md`, whose example delegation
+  bullet now matches what `akmon init` writes, work-style clause included.
 - **The dev-layer root is declared by a `.aitna-root` file, and the `AITNA_ROOT` environment
   variable is removed (C157,
   [ADR-0022](https://github.com/akumidv/ai_akmon/blob/main/docs/adr/0022-local-layer-index-and-plans.md)/D09).**

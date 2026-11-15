@@ -242,7 +242,7 @@ def test_self_ci_runs_the_shipped_leg_against_akmons_own_tree():
 
     import self_ci
 
-    assert "always_loaded_caps.check_always_loaded(akmon_root)" in inspect.getsource(self_ci._run)
+    assert "always_loaded_caps.check_always_loaded(akmon_root)" in inspect.getsource(self_ci._own_checks)
 
 
 # --------------------------------------------------------------------------------------
