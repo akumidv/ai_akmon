@@ -10,13 +10,18 @@ A decision:
 
 ```
 1. **D-C139-ORDER** — order of rows in the report
+
    Σ. <the question in one to three sentences, one fact each, on a concrete case>.
+
    Options:
-   (a) <the choice> — <its cost, its weak spot, what stays>;
-   (b) <the choice> — <its cost, its weak spot, what stays>;
-   (c) <the choice> — rejected: <why>.
+   - (a) <the choice> — <its cost, its weak spot, what stays>;
+   - (b) <the choice> — <its cost, its weak spot, what stays>;
+   - (c) <the choice> — rejected: <why>.
+
    Recommendation — (b): <the reason, one or two sentences>. After <what it waits on>.
 ```
+
+The blank lines and the option list are kept: a Markdown view joins adjacent lines into one paragraph.
 
 An action:
 
