@@ -761,7 +761,7 @@ class _Classification:
     """What a fresh block says of the project: archetype and language as given, profiles found.
 
     ``profiles`` are the language profiles the block imports (``python.md``), one line each
-    right after the common guardrail, under the attach's prefix.
+    right after the imports region, under the attach's prefix.
     """
 
     archetype: str = "<archetype>"
@@ -781,8 +781,10 @@ def _agents_block(aitna: str, ref: str, classification: _Classification, *, pack
     def link(name: str) -> str:
         return _doc_link(name, aitna, ref, package_mode=package_mode)
 
-    guardrails_dir = f"{aitna}/.akmon/guardrails" if package_mode else f"{aitna}/akmon/guardrails"
-    profiles_dir = f"{aitna}/.akmon/profiles" if package_mode else f"{aitna}/akmon/profiles"
+    base = f"{aitna}/.akmon" if package_mode else f"{aitna}/akmon"
+    profiles_dir = f"{base}/profiles"
+    sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
+    region = "\n".join(sync_mod.imports_region(base))
     fragment = "package" if package_mode else "mounted"
     roles_hint = jsondata.fill(
         data[f"agents_roles_hint_{fragment}"], {"roles_link": link("roles/README.md"), "aitna": aitna}
@@ -801,7 +803,7 @@ def _agents_block(aitna: str, ref: str, classification: _Classification, *, pack
             "aitna": aitna,
             "shared_layer": shared_layer,
             "roles_hint": roles_hint,
-            "guardrails_dir": guardrails_dir,
+            "imports_region": region,
             "profiles_dir": profiles_dir,
             "profile_imports": "".join(f"\n@{profiles_dir}/{profile}" for profile in classification.profiles),
             "pre_commit": link("pipelines/pre-commit.md"),

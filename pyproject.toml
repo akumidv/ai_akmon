@@ -61,6 +61,7 @@ sources = {"src" = "", "js" = "akmon/_tree/js"}
 "pipelines" = "akmon/_tree/pipelines"
 "profiles" = "akmon/_tree/profiles"
 "roles" = "akmon/_tree/roles"
+"rules" = "akmon/_tree/rules"
 "skills" = "akmon/_tree/skills"
 "tools" = "akmon/_tree/tools"
 

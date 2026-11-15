@@ -110,6 +110,8 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "agents/learning.md",
         "agents/release.md",
         "guardrails/_common.md",
+        "rules/collaboration.md",
+        "rules/templates.md",
         "pipelines/pre-commit.md",
         "pipelines/code-flow.md",
         "pipelines/design-flow.md",
@@ -344,11 +346,13 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[st
     )
     # The fixture has no linter of its own, so `init` set up ruff with akmon's Python rules, and its
     # pyproject.toml made the fresh block import the Python profile (C127); `sync` materialized both
-    # beside the imported guardrail — and nothing else.
+    # beside the imported guardrail and the standard's rule files — and nothing else.
     if materialized != [
         "_aitna/.akmon/guardrails/_common.md",
         "_aitna/.akmon/profiles/python.md",
         "_aitna/.akmon/profiles/ruff.toml",
+        "_aitna/.akmon/rules/collaboration.md",
+        "_aitna/.akmon/rules/templates.md",
     ]:
         raise RuntimeError(f"package mode materialized more than the imported rules: {materialized}")
 
@@ -588,7 +592,12 @@ def _installed_npm_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[str,
     # The lint rules are extended in place from node_modules/akmon/profiles/oxlint.json (C109), so only
     # the imported guardrail and the js profile the fresh block imports for a package.json (C127) are
     # materialized.
-    if materialized != ["_aitna/.akmon/guardrails/_common.md", "_aitna/.akmon/profiles/js.md"]:
+    if materialized != [
+        "_aitna/.akmon/guardrails/_common.md",
+        "_aitna/.akmon/profiles/js.md",
+        "_aitna/.akmon/rules/collaboration.md",
+        "_aitna/.akmon/rules/templates.md",
+    ]:
         raise RuntimeError(f"the Node attach materialized more than the imported rules: {materialized}")
     wiring = [command for _, _, command in _generated_hook_commands(fixture)]
     if not wiring or any("/node_modules/akmon/js/hooks/" not in command for command in wiring):

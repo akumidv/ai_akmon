@@ -154,6 +154,8 @@ def test_materialization_ships_only_the_guardrails_agents_md_imports(tmp_path):
     assert paths == {
         "_aitna/.akmon/guardrails/_common.md",
         "_aitna/.akmon/profiles/python.md",
+        "_aitna/.akmon/rules/collaboration.md",
+        "_aitna/.akmon/rules/templates.md",
     }
     guardrail = next(f for f in files if f.path.name == "_common.md")
     assert sync.generated_marker() in guardrail.content
@@ -174,7 +176,7 @@ def test_no_executable_surface_is_materialized(tmp_path):
 
 
 def test_a_guardrail_import_quoted_in_prose_is_not_an_import(tmp_path):
-    """Only the ``_common.md`` anchor survives when every other mention is an example."""
+    """Only the always-imported files survive when every other mention is an example."""
     agents_md = """# AGENTS
 
 Add a language guardrail, for example `@_aitna/.akmon/guardrails/python.md`.
@@ -187,16 +189,17 @@ Add a language guardrail, for example `@_aitna/.akmon/guardrails/python.md`.
 """
     root = _make_package_root(tmp_path, agents_md=agents_md)
     names, errors = sync.imported_standard_files(root)
-    assert names == ["guardrails/_common.md"]
+    assert names == ["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"]
     assert errors == []
 
 
-def test_the_common_guardrail_is_materialized_even_when_agents_md_imports_nothing(tmp_path):
-    """Its import is the anchor ``verify`` requires of a package-mode AGENTS.md, so a missing
-    one is a finding about AGENTS.md — not a licence to ship a broken import target."""
+def test_the_always_imported_files_are_materialized_even_when_agents_md_imports_nothing(tmp_path):
+    """The common guardrail's import is the anchor ``verify`` requires of a package-mode AGENTS.md,
+    so a missing one is a finding about AGENTS.md — not a licence to ship a broken import target;
+    the rule files beside it travel with it."""
     root = _make_package_root(tmp_path, agents_md="# AGENTS\n")
     names, errors = sync.imported_standard_files(root)
-    assert names == ["guardrails/_common.md"]
+    assert names == ["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"]
     assert errors == []
 
 
@@ -407,7 +410,7 @@ def test_a_previous_versions_materialization_is_removed_in_one_run(tmp_path):
     assert not bytecode.exists() and not bytecode.parent.exists()
     for emptied in ("hooks", "common", "tools/model_routing", "tools"):
         assert not (stale / emptied).exists(), emptied
-    assert sorted(p.name for p in stale.iterdir()) == ["guardrails", "profiles"]
+    assert sorted(p.name for p in stale.iterdir()) == ["guardrails", "profiles", "rules"]
 
 
 def test_sync_check_does_not_report_bytecode_left_by_a_hook_run(tmp_path):

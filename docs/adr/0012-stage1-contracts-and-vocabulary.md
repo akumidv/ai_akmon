@@ -388,6 +388,20 @@ Each scope must satisfy both inclusive dimensions. Decimal bytes are normative: 
 > hand-owned allowance of 250 lines / 13,000 bytes — so a consumer's own room does not shrink.
 > Everything else in the D-CAP amendment stands.
 
+> **Amendment — D-A49-CONTENT, owner-approved: the caps follow the collaboration rules into their
+> own files.** The rules for working with the owner left the guardrail for `rules/collaboration.md`
+> and `rules/templates.md`, both loaded at session start through the managed imports region
+> (ADR-0018/D02 amendment), and took the request-writing part of design-flow with them, so the
+> shipped chain measured 463 lines and 29,647 bytes. The caps are that measure rounded up with a
+> small margin; shrinking the chain is A49's next step.
+>
+> | scope | inclusive cap | checker and result |
+> |---|---|---|
+> | akmon-shipped | `≤472 lines` and `≤30,000 bytes` | `self_ci`: error |
+> | consumer total | `≤722 lines` and `≤43,000 bytes` | `verify.py`: warn; exit 1 under `--strict` only |
+>
+> The consumer pair keeps its construction: the shipped pair plus 250 lines / 13,000 bytes.
+
 Both checks emit the exact stable code `caps.always-loaded`. Their target distinguishes the scope,
 and the diagnostic reports that scope's measured line and byte counts beside both caps. Enforcement
 and rendering use the same counters; stale or hard-coded output is a contract failure.

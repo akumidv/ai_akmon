@@ -28,7 +28,7 @@ from typing import Any
 # here rather than left to the caller because both launchers are entry points in their own right.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common import jsondata
+from common import always_loaded, jsondata
 from common.findings import Finding, line_safe, print_findings, read_findings_data
 from common.materialization import (
     generated_banner,
@@ -658,14 +658,15 @@ _FENCED_BLOCK_RE = re.compile(r"^(?P<fence>```|~~~).*?(?:^(?P=fence)[^\n]*$|\Z)"
 _INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 
 
-def _always_materialized(data: Mapping[str, Any]) -> str:
-    """The import materialized whether or not the scan finds it (``sync.json``).
+def always_imported(data: Mapping[str, Any] | None = None) -> list[str]:
+    """The standard's rule files every consumer loads at session start, in import order (``sync.json``).
 
-    The common guardrail is the anchor ``verify`` requires of a package-mode AGENTS.md, so its
-    absence is a finding about AGENTS.md, not a licence to ship the consumer a broken import
-    target.
+    Package mode materializes them whether or not the scan finds them: the common guardrail is
+    the anchor ``verify`` requires of a package-mode AGENTS.md, so its absence is a finding about
+    AGENTS.md, not a licence to ship the consumer a broken import target. The akmon block's
+    managed region imports exactly these files (:func:`imports_region`).
     """
-    return data["always_materialized"]
+    return list(_or_read(data)["always_imported"])
 
 
 def moved_imports(data: Mapping[str, Any] | None = None) -> dict[str, str]:
@@ -678,13 +679,117 @@ def moved_imports(data: Mapping[str, Any] | None = None) -> dict[str, str]:
     return dict(_or_read(data)["moved_imports"])
 
 
-def import_prefix(root: Path) -> str:
-    """The ``@``-import prefix of the standard's files in this project's ``AGENTS.md``.
+def import_base(root: Path) -> str:
+    """The directory the standard's files are imported from, ``@`` and trailing slash left out.
 
     The materialized copy in package mode, the mount otherwise.
     """
     name = aitna_root_name(root)
-    return f"@{name}/.akmon/" if is_package_mode(root) else f"@{name}/akmon/"
+    return f"{name}/.akmon" if is_package_mode(root) else f"{name}/akmon"
+
+
+def import_prefix(root: Path) -> str:
+    """The ``@``-import prefix of the standard's files in this project's ``AGENTS.md``."""
+    return f"@{import_base(root)}/"
+
+
+def imports_region(base: str, data: Mapping[str, Any] | None = None) -> list[str]:
+    """The managed region of the akmon block: its markers and one import line per ``always_imported`` file.
+
+    ``base`` is where the standard's files are imported from (:func:`import_base`). ``init`` writes
+    the region into a fresh block and ``sync`` rewrites it; the rest of the block stays hand-owned
+    (ADR 0018/D02).
+    """
+    data = _or_read(data)
+    markers = data["imports_region"]
+    return [markers["open"], *(f"@{base}/{name}" for name in always_imported(data)), markers["close"]]
+
+
+def _fence_flags(lines: Sequence[str]) -> list[bool]:
+    """Per line, whether it sits inside (or opens or closes) a fenced block."""
+    flags = []
+    fence = ""
+    for line in lines:
+        stripped = line.lstrip()
+        marker = stripped[:3] if stripped[:3] in ("```", "~~~") else ""
+        if fence:
+            flags.append(True)
+            if marker == fence:
+                fence = ""
+        elif marker:
+            flags.append(True)
+            fence = marker
+        else:
+            flags.append(False)
+    return flags
+
+
+def _sync_block_region(block: str, root: Path, data: Mapping[str, Any]) -> str:
+    """``block`` with the imports region rewritten, or put in place when it has none.
+
+    Without a region the existing import of a standard rule file (current or moved path) becomes
+    the region; failing that it goes right before the first profile import, else at the end.
+    """
+    region = imports_region(import_base(root), data)
+    markers = data["imports_region"]
+    lines = block.split("\n")
+    fenced = _fence_flags(lines)
+    opened = [i for i, line in enumerate(lines) if line.strip() == markers["open"] and not fenced[i]]
+    closed = [i for i, line in enumerate(lines) if line.strip() == markers["close"] and not fenced[i]]
+    if opened or closed:
+        if len(opened) != 1 or len(closed) != 1 or closed[0] < opened[0]:
+            raise ValueError(
+                f"AGENTS.md akmon block has an unbalanced imports region: expected one {markers['open']} line "
+                f"followed by one {markers['close']} line"
+            )
+        return "\n".join([*lines[: opened[0]], *region, *lines[closed[0] + 1 :]])
+    base = import_base(root)
+    moved = moved_imports(data)
+    wanted = always_imported(data)
+    rule_lines = {f"@{base}/{name}" for name in wanted}
+    rule_lines.update(f"@{base}/{old}" for old, new in moved.items() if new in wanted)
+    standard = [i for i, line in enumerate(lines) if line.strip() in rule_lines and not fenced[i]]
+    if standard:
+        first = standard[0]
+        kept = [line for i, line in enumerate(lines) if i not in standard[1:]]
+        return "\n".join([*kept[:first], *region, *kept[first + 1 :]])
+    profiles = f"@{base}/profiles/"
+    before = next(
+        (i for i, line in enumerate(lines) if line.strip().startswith(profiles) and not fenced[i]),
+        None,
+    )
+    if before is not None:
+        return "\n".join([*lines[:before], *region, *lines[before:]])
+    end = max((i for i, line in enumerate(lines) if line.strip()), default=-1) + 1
+    return "\n".join([*lines[:end], "", *region, *lines[end:]])
+
+
+def sync_imports_region(agents_text: str, root: Path, data: Mapping[str, Any] | None = None) -> str:
+    """``agents_text`` with its akmon block's imports region as the standard wants it.
+
+    Text with no akmon block comes back unchanged, and nothing outside the region (or the lines it
+    replaces) is touched. Raises ``ValueError`` for a region with a missing or doubled marker.
+    """
+    block = always_loaded.marked_block(agents_text)
+    if block is None:
+        return agents_text
+    start = agents_text.index(block)
+    synced = _sync_block_region(block, root, _or_read(data))
+    return agents_text[:start] + synced + agents_text[start + len(block) :]
+
+
+def _agents_md_plan(root: Path, data: Mapping[str, Any]) -> tuple[list[PlannedFile], list[str]]:
+    """AGENTS.md with its imports region, when the file carries an akmon block; else no plan at all."""
+    path = root / "AGENTS.md"
+    if not path.is_file():
+        return [], []
+    text = path.read_text(encoding="utf-8")
+    if always_loaded.marked_block(text) is None:
+        return [], []
+    try:
+        return [PlannedFile(path, sync_imports_region(text, root, data))], []
+    except ValueError as exc:
+        return [], [str(exc)]
 
 
 @dataclass(frozen=True)
@@ -794,7 +899,7 @@ def ruff_extends(root: Path, data: Mapping[str, Any] | None = None) -> list[tupl
 def imported_standard_files(root: Path, data: Mapping[str, Any] | None = None) -> tuple[list[str], list[str]]:
     """The standard's files the project actually uses, and any plan errors.
 
-    The files — as ``guardrails/<name>`` and ``profiles/<name>`` — are every file
+    The files — as ``guardrails/<name>``, ``rules/<name>`` and ``profiles/<name>`` — are every file
     ``AGENTS.md`` ``@``-imports, and the ruff rules a ruff configuration of the project
     ``extend``s.
 
@@ -812,7 +917,7 @@ def imported_standard_files(root: Path, data: Mapping[str, Any] | None = None) -
     data = _or_read(data)
     prefix = import_prefix(root)
     path_prefix = prefix.removeprefix("@")
-    origins = {_always_materialized(data): "AGENTS.md imports"} if is_package_mode(root) else {}
+    origins = dict.fromkeys(always_imported(data), "AGENTS.md imports") if is_package_mode(root) else {}
     text_path = root / "AGENTS.md"
     if text_path.is_file():
         text = _INLINE_CODE_RE.sub(" ", _FENCED_BLOCK_RE.sub("\n", text_path.read_text(encoding="utf-8")))
@@ -840,8 +945,8 @@ def imported_standard_files(root: Path, data: Mapping[str, Any] | None = None) -
 def _materialized_files(root: Path, data: Mapping[str, Any] | None = None) -> tuple[list[PlannedFile], list[str]]:
     """Package-mode materialization (ADR 0009 §4, narrowed by C77, widened to profiles by ADR 0014).
 
-    The guardrails and profiles the consumer's ``AGENTS.md`` imports, the ruff rules its
-    ruff configuration extends, and nothing else.
+    The guardrails, rules and profiles the consumer's ``AGENTS.md`` imports (the ``always_imported``
+    files whether or not it does yet), the ruff rules its ruff configuration extends, and nothing else.
 
     Nothing executable is copied any more. The hooks, the ``common`` package they import, the
     routing library and its registry are already installed beside the consumer, inside the
@@ -989,6 +1094,9 @@ def _planned_files(root: Path, data: Mapping[str, Any] | None = None) -> tuple[l
     materialized, materialization_errors = _materialized_files(root, data)
     files.extend(materialized)
     errors.extend(materialization_errors)
+    agents_plan, agents_errors = _agents_md_plan(root, data)
+    files.extend(agents_plan)
+    errors.extend(agents_errors)
     toml_plan = _package_mode_akmon_toml(root)
     if toml_plan is not None:
         files.append(toml_plan)
@@ -1129,6 +1237,12 @@ def _check_findings(result: Result, data: Mapping[str, Any], *, root: Path) -> l
     for path in result.changed:
         relative = str(path.relative_to(root))
         message, fix = one("stale", relative)
+        if path == root / "AGENTS.md":
+            region = imports_region(import_base(root), data)
+            message = jsondata.fill(
+                texts["stale_imports_region"]["message"], {"relative": relative, "lines": " ".join(region)}
+            )
+            fix = texts["stale_imports_region"]["fix"]
         findings.append(
             Finding("error", "sync.stale-generated", line_safe(message), line_safe(relative), fix, data=record)
         )

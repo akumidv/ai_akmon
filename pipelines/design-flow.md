@@ -137,118 +137,10 @@ design records.
 
 ## Decision requests
 
-Label every request for an owner decision with a bold, uppercase mnemonic code such as
-**D-ORDER** or **D-SLICE**. The code identifies one bounded choice, not its display position.
-Keep it stable across reordering, turns and session resumption for as long as the request is
-open, and never assign it to another open choice. A request that belongs to a task — a question, a
-decision or a confirmation — carries the task ID, for example **D-C139-GATES**; a request outside any
-task is the plain **D-ORDER**, with no further qualifier. A material change to the requested scope gets a new code; the earlier
-request is closed and its response goes into the record as below.
-
-Each item states the requested choice and enough context to answer it independently. Give
-labelled options when the choice is bounded, and a recommendation with its reason when there
-is a basis for one. Questions requiring owner knowledge may remain open rather than inventing
-options or a recommendation.
-
-Write each request for the owner, not for its author. A term, abbreviation or code the owner has not
-used is spelled out where it first appears; a choice about a shape, a name or a data layout carries one
-concrete example per option; a recommendation carries its reason, never the bare label, because the owner
-may ask *why is it better?*. A proposal from another agent or session is an option to weigh against the
-alternatives, not a decision; one that departs from an accepted decision block names which of that
-block's reasons no longer holds, and does not simply endorse it. A request the owner calls unclear is
-asked again with an example, not argued.
-
-The owner may reply with a code plus an option label or free text, in any order and for any
-subset of requests. Match each response by code, not by position; omitted or unresolved items
-stay pending. A bare code identifies an item but does not accept it. Ordinary unambiguous
-acceptance without a code remains valid; clarify only ambiguous references or scope. These
-codes do not add a new approval gate or require confirmation of unchanged decisions.
-
-The decisions are the owner's: a request has no default, and one left unanswered stays pending.
-The owner may answer **`all as recommended`** — read by its meaning in any language, so *всё по
-рекомендации* counts the same. It accepts **decisions only**: each design or code choice in the
-closing block that carries a recommendation. **It never permits an action** — a go-ahead to write a
-record, a commit, a push, a carry of a branch, a tag, a release, a publication, a run, or a request
-to supply something: each of those is closed only by an answer with its own code. An item with no
-recommendation is not closed by it and stays pending. The owner then names by code only the
-exceptions — another option or a clarification — and an answer by code overrides the general one.
-
-For example, two requests might be:
-
-1. **D-ORDER** — order of the processed rows
-   Essence. The new sort reorders rows by priority. Two callers read the rows by position.
-   Options:
-   (a) keep input order — priority stays visible only in a column;
-   (b) sort by priority — the two callers break until they read by key.
-   Recommendation — (a): the callers depend on input order, and (b) costs a change in both.
-2. **D-SLICE** — rollout scope
-   Essence. The change touches four consumers; only the reporting one has tests over this path.
-   Options:
-   (a) every consumer at once — one release, but a break shows in three untested places;
-   (b) the reporting consumer first — a second release for the other three.
-   Recommendation — (b): it gives a bounded compatibility check before the untested three.
-
-The owner can answer `all as recommended, except D-SLICE: a, the release window is now`, or answer
-`D-SLICE: b, start with the reporting consumer`, leaving **D-ORDER** pending, then later
-`D-ORDER: a`. The replies resolve the requests in any order without quoting either question.
-
-### Where requests sit in a reply
-
-Narrate in the body, sum up at the end. **The closing block is complete enough that a decision
-taken from it alone is the right one;** the body argues a question in full — where the problem comes
-from, the options, and why one is recommended — **only where that is needed:**
-
-- its reasoning does not fit the item, which then carries the
-  `(short — full reasoning above under D-…)` mark; or
-- the question is asked again in a later message than the one that first asked it — the first
-  argument is no longer in view, or was compacted away, so it is given again.
-
-Otherwise a simple question stands in the block alone and is not written twice. Where the body does
-argue a question, the block sums that argument up; it does not copy it.
-
-Every turn that asks for, or leaves pending, an owner action **ends** with one closing block headed
-`Needed from you` and nothing after it; it says when nothing is needed. The block is grouped under
-**`Decide`** — decisions, which `all as recommended` may accept — and **`Act`** — actions (a go-ahead
-to write, a commit, a push, a release, a run, something to supply), each closed only by its own
-code. Each pending request is one numbered item in short, plain sentences:
-
-```
-1. **D-C139-ORDER** — order of rows in the report
-   Essence. <the problem in one to three sentences, one fact each, on a concrete case>.
-   Options:
-   (a) <the choice> — <its cost, its weak point, what stays>;
-   (b) <the choice> — <its cost, its weak point, what stays>;
-   (c) <the choice> — rejected: <why>.
-   Recommendation — (b): <the reason, in one or two sentences>. After <what it waits on>.
-```
-
-- **Essence** sums up the body's argument, it does not repeat it.
-- **Every option carries its cost and its weak points**, the recommended one above all: the owner sees
-  what choosing it costs. An option weighed and rejected stays in the list, marked `rejected` with its
-  reason.
-- **The recommendation always carries its reason**, in one or two sentences. Where it cannot be
-  stated fairly in that space, the item gives the main reason and marks it
-  `(short — full reasoning above under D-…)`; a reason cut short without that mark is not allowed,
-  since the owner would decide on an incomplete argument. Where there is no basis for a recommendation,
-  the item says so.
-- **After** is written only where the order or a dependency matters.
-- An action takes the short form: its code, its gist and one sentence of what is needed.
-- A term the owner has not used is spelled out in plain words where it first appears, and the code
-  stays the same while the request is open ([§ Decision requests](#decision-requests)).
-- **Every item carries a code, confirmations and go-aheads included:** the owner answers by copying
-  the code, so an item without one has to be quoted in full.
-- The item labels (`Essence`, `Options`, `Recommendation`, `After`), the group headings and the
-  block heading stay English; the text under them follows the chat language.
-- The block's last line reads `Answer "all as recommended" for the decisions and name the exceptions
-  by code; each action needs its own code.` ([§ Decision requests](#decision-requests)).
-
-**A code heads the passage that argues its question.** The paragraph that gives a request's
-grounds, its description or the reasoning behind its recommendation is preceded by a heading line
-carrying that request's code in bold and its gist — without it the reader cannot tie the closing
-item back to the reasoning, or the reasoning forward to the item. The heading is a label on the
-narration, not the ask. The asks are not scattered through the body: a reader who skips to the end
-must find the whole list there, and a reader of the body must see which question each passage is
-about.
+How a request to the owner is coded, written, closed in the `Needed from you` block and answered is
+[rules/collaboration.md](../rules/collaboration.md), loaded at session start for every role; its
+shapes are in [rules/templates.md](../rules/templates.md). This section keeps only how a request is
+recorded.
 
 While a request is open, its code, scope and option definitions live in the existing living
 design or task. When it is answered, the owner's choice and rationale go into the record that
@@ -256,6 +148,10 @@ owns the commitment — the accepted ADR block, with the options it weighed — 
 dropped; it is not retained in the ADR block. Use these existing records, not a separate request
 ledger. A code identifies an open request and may be reused once it closes; the durable identity
 of an accepted block is its `Decision-ID`.
+
+### Where requests sit in a reply
+
+In the closing `Needed from you` block, per [collaboration § The closing block](../rules/collaboration.md#the-closing-block).
 
 ## Decision blocks and later changes
 

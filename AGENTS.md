@@ -7,7 +7,11 @@ restated** — they are the single owner of every rule they carry, the same requ
 places on the projects it attaches to. A rule that belongs to them is added there, not here;
 this file carries only what is true of akmon and of nothing else.
 
+<!-- akmon:imports -->
 @guardrails/_common.md
+@rules/collaboration.md
+@rules/templates.md
+<!-- /akmon:imports -->
 @profiles/python.md
 @profiles/js.md
 @profiles/python-stdlib.md

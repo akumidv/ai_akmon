@@ -367,11 +367,19 @@ def _init_vendored(root: Path, *extra: str) -> int:
     return _init.main(["--mode", "vendored", "--project-root", str(root), "--yes", *extra])
 
 
+def _region(base: str) -> str:
+    """The akmon block's managed imports region as a fresh block writes it, for ``base``."""
+    return (
+        f"<!-- akmon:imports -->\n@{base}/guardrails/_common.md\n@{base}/rules/collaboration.md\n"
+        f"@{base}/rules/templates.md\n<!-- /akmon:imports -->\n"
+    )
+
+
 def test_init_writes_agents_md_when_absent(tmp_path):
     assert _init_vendored(tmp_path) == 0
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert _init.block_heading() in text
-    assert "@_aitna/akmon/guardrails/_common.md" in text
+    assert _region("_aitna/akmon") in text
     assert "delegation is the default" in text.lower()
 
 
@@ -382,7 +390,7 @@ def test_init_writes_agents_md_when_absent(tmp_path):
 def test_init_imports_the_profile_the_language_flag_names(tmp_path, capsys):
     assert _init_vendored(tmp_path, "--archetype", "package", "--language", "python") == 0
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-    assert "@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/python.md\n" in text
+    assert _region("_aitna/akmon") + "@_aitna/akmon/profiles/python.md\n" in text
     assert "classify the project" not in capsys.readouterr().out
 
 
@@ -390,7 +398,7 @@ def test_init_imports_the_profile_the_manifest_names_and_keeps_classify(tmp_path
     _write(tmp_path / "pyproject.toml", '[project]\nname = "demo"\n')
     assert _init_vendored(tmp_path, "--checks", "none") == 0
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-    assert "@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/python.md\n" in text
+    assert _region("_aitna/akmon") + "@_aitna/akmon/profiles/python.md\n" in text
     out = capsys.readouterr().out
     assert "classify the project's archetype against ARCHETYPES.md" in out  # the archetype is still unclassified
     assert "import the language profile" not in out  # init already imported it (C127)
@@ -401,9 +409,7 @@ def test_init_imports_both_profiles_python_first(tmp_path):
     _write(tmp_path / "package.json", "{}\n")
     assert _init_vendored(tmp_path, "--checks", "none") == 0
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-    assert (
-        "@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/python.md\n@_aitna/akmon/profiles/js.md\n"
-    ) in text
+    assert _region("_aitna/akmon") + "@_aitna/akmon/profiles/python.md\n@_aitna/akmon/profiles/js.md\n" in text
 
 
 def test_init_imports_no_profile_for_an_unknown_language(tmp_path, capsys):
@@ -411,7 +417,7 @@ def test_init_imports_no_profile_for_an_unknown_language(tmp_path, capsys):
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     sync_mod = cli._load_embedded_sync(_tree.embedded_tree_root())
     assert sync_mod.profile_imports(text) == []
-    assert "@_aitna/akmon/guardrails/_common.md\n\n" in text
+    assert _region("_aitna/akmon") + "\n" in text
     out = capsys.readouterr().out
     assert "classify the project (archetype + language)" in out
     assert "import the language profile in AGENTS.md" in out
@@ -421,7 +427,7 @@ def test_package_block_imports_profiles_under_the_materialized_prefix():
     block = _init._agents_block(
         "_aitna", "v0.1.0", _init._Classification("package", "python", ("python.md",)), package_mode=True
     )
-    assert "@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/profiles/python.md\n" in block
+    assert _region("_aitna/.akmon") + "@_aitna/.akmon/profiles/python.md\n" in block
     # the quoted form names no profile: the example is a placeholder, not a value to copy
     assert "`@_aitna/.akmon/profiles/<name>.md`" in block
 
@@ -447,11 +453,12 @@ def test_init_appends_the_block_and_preserves_existing_content(tmp_path):
     assert _init.block_heading() in text
 
 
-def test_init_never_rewrites_an_existing_akmon_block(tmp_path):
+def test_init_never_rewrites_an_existing_akmon_block_beyond_its_imports_region(tmp_path):
+    """The block is hand-owned: `init` writes nothing into it, and the `sync` it runs adds the region only."""
     hand_written = f"# AGENTS.md\n\n{_init.block_heading()}\n\nHand-tuned block; do not touch.\n"
     _write(tmp_path / "AGENTS.md", hand_written)
     assert _init_vendored(tmp_path) == 0
-    assert (tmp_path / "AGENTS.md").read_text(encoding="utf-8") == hand_written
+    assert (tmp_path / "AGENTS.md").read_text(encoding="utf-8") == hand_written + "\n" + _region("_aitna/akmon")
 
 
 # --------------------------------------------------------------------------------------
@@ -698,6 +705,8 @@ def test_package_attach_verifies_strict_green(tmp_path, monkeypatch):
         "_aitna/.akmon/guardrails/_common.md",
         "_aitna/.akmon/profiles/python.md",
         "_aitna/.akmon/profiles/ruff.toml",
+        "_aitna/.akmon/rules/collaboration.md",
+        "_aitna/.akmon/rules/templates.md",
     ]
     configs = [
         p.read_text(encoding="utf-8") for p in (tmp_path / "pyproject.toml", tmp_path / "ruff.toml") if p.is_file()
@@ -1066,7 +1075,8 @@ def test_mode_switch_names_the_edits_it_will_not_make(tmp_path, capsys):
     )
     out = capsys.readouterr().out
     assert "re-point the AGENTS.md akmon block" in out
-    assert "@_aitna/.akmon/guardrails/_common.md" in out
+    assert "<!-- akmon:imports -->" in out
+    assert "@_aitna/.akmon/profiles/<name>.md" in out
     assert "remove the now-unused mount `_aitna/akmon`" in out
     assert "update the akmon commands in your existing workflow(s)" in out
 

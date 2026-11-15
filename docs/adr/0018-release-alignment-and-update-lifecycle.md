@@ -27,6 +27,15 @@ hand-owned ones; realign does not silently overwrite a consumer's root `AGENTS.m
 choices. A release communicates required manual migrations. Mounted and package carriers share
 the contract while retaining their carrier-specific mechanics.
 
+> **Amendment — D-A49-SYNC, owner-approved: one managed region inside the `AGENTS.md` block.** The
+> standard rule files every consumer loads at session start — the common guardrail and the files
+> under `rules/` — are imported from a region between `<!-- akmon:imports -->` and
+> `<!-- /akmon:imports -->`, which `sync` rewrites to the standard's current list and `sync --check`
+> reports when it differs; a block without the region gets it in place of its guardrail import line.
+> Everything else in `AGENTS.md`, profile imports included, stays hand-owned and is only checked. The
+> reason: a new rule file or a moved path otherwise needs a hand edit in every consumer, and an
+> unresolved `@`-import fails silently. The cost: a hand edit inside the region is overwritten.
+
 ### D03 — Explicit update and rollback
 
 `Decision-ID: ADR-0018/D03`

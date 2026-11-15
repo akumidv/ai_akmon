@@ -1336,11 +1336,22 @@ test("the detected profiles follow the flags and the manifests, python first, no
   ]);
 });
 
-test("a fresh block imports js.md after the common guardrail and keeps no classify step once classified", async () => {
+/**
+ * The managed imports region a fresh block writes for `base` (`_aitna/.akmon`, `_aitna/akmon`).
+ * @param {string} base
+ */
+function region(base) {
+  return (
+    `<!-- akmon:imports -->\n@${base}/guardrails/_common.md\n@${base}/rules/collaboration.md\n` +
+    `@${base}/rules/templates.md\n<!-- /akmon:imports -->\n`
+  );
+}
+
+test("a fresh block imports js.md after the imports region and keeps no classify step once classified", async () => {
   const root = project({ "package.json": PINNED }, { linked: true });
   const result = await run(["--yes", "--archetype", "library", "--project-root", root]);
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.ok(text(root, "AGENTS.md").includes("@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/profiles/js.md\n"));
+  assert.ok(text(root, "AGENTS.md").includes(`${region("_aitna/.akmon")}@_aitna/.akmon/profiles/js.md\n`));
   assert.ok(text(root, "AGENTS.md").includes("`@_aitna/.akmon/profiles/<name>.md`"));
   assert.ok(!result.stdout.includes("classify the project"));
   assert.ok(fs.existsSync(posix.join(root, "_aitna/.akmon/profiles/js.md")), "sync materialized the import");
@@ -1352,7 +1363,7 @@ test("a fresh block imports both profiles when both manifests are present, pytho
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.ok(
     text(root, "AGENTS.md").includes(
-      "@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/profiles/python.md\n@_aitna/.akmon/profiles/js.md\n",
+      `${region("_aitna/.akmon")}@_aitna/.akmon/profiles/python.md\n@_aitna/.akmon/profiles/js.md\n`,
     ),
   );
   assert.ok(result.stdout.includes("classify the project's archetype against ARCHETYPES.md"), "still unclassified");
@@ -1362,7 +1373,7 @@ test("a fresh block imports both profiles when both manifests are present, pytho
 test("a bare directory gets no profile import and keeps the classify step", async () => {
   const root = project();
   const result = await run(["--yes", "--project-root", root]);
-  assert.ok(text(root, "AGENTS.md").includes("@_aitna/.akmon/guardrails/_common.md\n\n"));
+  assert.ok(text(root, "AGENTS.md").includes(`${region("_aitna/.akmon")}\n`));
   assert.ok(!/^@\S*profiles\//m.test(text(root, "AGENTS.md")));
   assert.ok(result.stdout.includes("classify the project (archetype + language)"));
   assert.ok(result.stdout.includes("import the language profile in AGENTS.md"));
@@ -1460,7 +1471,7 @@ test("vendored: the mount carries the standard, the CLI data and package.json; t
     text(root, "_aitna/.akmon.toml").includes(`mount = "vendored"\necosystem = "node"\nakmon_version = "${VERSION}"\n`),
   );
   const agents = text(root, "AGENTS.md");
-  assert.ok(agents.includes("@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/js.md\n"));
+  assert.ok(agents.includes(`${region("_aitna/akmon")}@_aitna/akmon/profiles/js.md\n`));
   assert.ok(agents.includes("[`MODEL.md`](_aitna/akmon/MODEL.md)") && agents.includes("SHARED = `_aitna/akmon/`"));
   const charter = text(root, "_aitna/agents/development/README.md");
   assert.ok(charter.startsWith("# Agent — development\n"));

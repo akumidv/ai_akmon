@@ -67,6 +67,7 @@ import { Finding, lineSafe, printFindings, readFindingsData } from "../common/fi
 import { fill, read } from "../common/jsondata.mjs";
 import { FloatValue, wiringForm } from "../common/json_writer.mjs";
 import { fnmatchCase } from "../common/glob.mjs";
+import { markedBlock, readAlwaysLoadedData } from "../common/always_loaded.mjs";
 import { generatedBanner, generatedMarker, importedDirs, materializedText } from "../common/materialization.mjs";
 import { aitnaRoot, aitnaRootName, resolveProjectRoot } from "../common/project_root.mjs";
 import { recordedEcosystem, recordedMount } from "../common/record.mjs";
@@ -106,7 +107,8 @@ import { codePointCompare, codePointSort } from "../common/sort.mjs";
  * @property {Array<[string, string]>} planned_files
  * @property {{no_frontmatter: string, with_frontmatter: string}} skill_stubs
  * @property {string[]} skill_stub_dirs
- * @property {string} always_materialized
+ * @property {string[]} always_imported
+ * @property {{open: string, close: string}} imports_region
  * @property {Record<string, string>} moved_imports
  * @property {Array<{profile: string, languages: string[], manifests: string[]}>} language_profiles
  * @property {Array<[string, string[]]>} ruff_configs
@@ -1355,14 +1357,177 @@ export function movedImports(data) {
 }
 
 /**
- * The `@`-import prefix of the standard's files in this project's `AGENTS.md`: the materialized copy
- * in package mode, the mount otherwise.
+ * The standard's rule files every consumer loads at session start, in import order (`sync.json`).
+ * Package mode materializes them whether or not the scan finds them: the common guardrail is the
+ * anchor `verify` requires of a package-mode AGENTS.md, so its absence is a finding about AGENTS.md,
+ * not a licence to ship the consumer a broken import target. The akmon block's managed region
+ * imports exactly these files ({@link importsRegion}).
+ * @param {SyncData} data
+ * @returns {string[]}
+ */
+export function alwaysImported(data) {
+  return [...data.sync.always_imported];
+}
+
+/**
+ * The directory the standard's files are imported from, `@` and trailing slash left out: the
+ * materialized copy in package mode, the mount otherwise.
+ * @param {string} root
+ * @returns {string}
+ */
+export function importBase(root) {
+  const name = aitnaRootName(root);
+  return isPackageMode(root) ? `${name}/.akmon` : `${name}/akmon`;
+}
+
+/**
+ * The `@`-import prefix of the standard's files in this project's `AGENTS.md`.
  * @param {string} root
  * @returns {string}
  */
 export function importPrefix(root) {
-  const name = aitnaRootName(root);
-  return isPackageMode(root) ? `@${name}/.akmon/` : `@${name}/akmon/`;
+  return `@${importBase(root)}/`;
+}
+
+/**
+ * The managed region of the akmon block: its markers and one import line per `always_imported`
+ * file. `base` is where the standard's files are imported from ({@link importBase}). `init` writes
+ * the region into a fresh block and `sync` rewrites it; the rest of the block stays hand-owned
+ * (ADR 0018/D02).
+ * @param {SyncData} data
+ * @param {string} base
+ * @returns {string[]}
+ */
+export function importsRegion(data, base) {
+  const markers = data.sync.imports_region;
+  return [markers.open, ...alwaysImported(data).map((name) => `@${base}/${name}`), markers.close];
+}
+
+/**
+ * Per line, whether it sits inside (or opens or closes) a fenced block.
+ * @param {readonly string[]} lines
+ * @returns {boolean[]}
+ */
+function _fenceFlags(lines) {
+  /** @type {boolean[]} */
+  const flags = [];
+  let fence = "";
+  for (const line of lines) {
+    const stripped = line.replace(/^[\t\n\v\f\r ]+/, "");
+    const head = stripped.slice(0, 3);
+    const marker = head === "```" || head === "~~~" ? head : "";
+    if (fence) {
+      flags.push(true);
+      if (marker === fence) {
+        fence = "";
+      }
+    } else if (marker) {
+      flags.push(true);
+      fence = marker;
+    } else {
+      flags.push(false);
+    }
+  }
+  return flags;
+}
+
+/**
+ * `block` with the imports region rewritten, or put in place when it has none. Without a region the
+ * existing import of a standard rule file (current or moved path) becomes the region; failing that
+ * it goes right before the first profile import, else at the end.
+ * @param {SyncData} data
+ * @param {string} block
+ * @param {string} root
+ * @returns {string}
+ */
+function _syncBlockRegion(data, block, root) {
+  const base = importBase(root);
+  const region = importsRegion(data, base);
+  const markers = data.sync.imports_region;
+  const lines = block.split("\n");
+  const fenced = _fenceFlags(lines);
+  /** @param {string} wanted */
+  const indexesOf = (wanted) => lines.flatMap((line, i) => (pyStrip(line) === wanted && !fenced[i] ? [i] : []));
+  const opened = indexesOf(markers.open);
+  const closed = indexesOf(markers.close);
+  if (opened.length > 0 || closed.length > 0) {
+    if (opened.length !== 1 || closed.length !== 1 || closed[0] < opened[0]) {
+      throw pyError(
+        "ValueError",
+        `AGENTS.md akmon block has an unbalanced imports region: expected one ${markers.open} line followed by one ${markers.close} line`,
+      );
+    }
+    return [...lines.slice(0, opened[0]), ...region, ...lines.slice(closed[0] + 1)].join("\n");
+  }
+  const moved = movedImports(data);
+  const wanted = alwaysImported(data);
+  const ruleLines = new Set(wanted.map((name) => `@${base}/${name}`));
+  for (const [old, target] of Object.entries(moved)) {
+    if (wanted.includes(target)) {
+      ruleLines.add(`@${base}/${old}`);
+    }
+  }
+  const standard = lines.flatMap((line, i) => (ruleLines.has(pyStrip(line)) && !fenced[i] ? [i] : []));
+  if (standard.length > 0) {
+    const first = standard[0];
+    const kept = lines.filter((_, i) => !standard.slice(1).includes(i));
+    return [...kept.slice(0, first), ...region, ...kept.slice(first + 1)].join("\n");
+  }
+  const profiles = `@${base}/profiles/`;
+  const before = lines.findIndex((line, i) => pyStrip(line).startsWith(profiles) && !fenced[i]);
+  if (before >= 0) {
+    return [...lines.slice(0, before), ...region, ...lines.slice(before)].join("\n");
+  }
+  let end = 0;
+  lines.forEach((line, i) => {
+    if (pyStrip(line)) {
+      end = i + 1;
+    }
+  });
+  return [...lines.slice(0, end), "", ...region, ...lines.slice(end)].join("\n");
+}
+
+/**
+ * `agentsText` with its akmon block's imports region as the standard wants it. Text with no akmon
+ * block comes back unchanged, and nothing outside the region (or the lines it replaces) is touched.
+ * @param {SyncData} data
+ * @param {string} agentsText
+ * @param {string} root
+ * @returns {string}
+ * @throws {Error} `ValueError` for a region with a missing or doubled marker
+ */
+export function syncImportsRegion(data, agentsText, root) {
+  const block = markedBlock(readAlwaysLoadedData(), agentsText);
+  if (block === null) {
+    return agentsText;
+  }
+  const start = agentsText.indexOf(block);
+  return agentsText.slice(0, start) + _syncBlockRegion(data, block, root) + agentsText.slice(start + block.length);
+}
+
+/**
+ * AGENTS.md with its imports region, when the file carries an akmon block; else no plan at all.
+ * @param {SyncData} data
+ * @param {string} root
+ * @returns {[PlannedFile[], string[]]}
+ */
+function _agentsMdPlan(data, root) {
+  const path = pyPath(root, "AGENTS.md");
+  if (!isFile(path)) {
+    return [[], []];
+  }
+  const text = _readText(path);
+  if (markedBlock(readAlwaysLoadedData(), text) === null) {
+    return [[], []];
+  }
+  try {
+    return [[new PlannedFile(path, syncImportsRegion(data, text, root))], []];
+  } catch (error) {
+    if (!(error instanceof Error) || error.name !== "ValueError") {
+      throw error;
+    }
+    return [[], [error.message]];
+  }
 }
 
 /**
@@ -1504,7 +1669,9 @@ export function importedStandardFiles(data, root) {
     }
   };
   if (isPackageMode(root)) {
-    origins.set(data.sync.always_materialized, "AGENTS.md imports");
+    for (const name of alwaysImported(data)) {
+      origins.set(name, "AGENTS.md imports");
+    }
   }
   const textPath = pyPath(root, "AGENTS.md");
   if (isFile(textPath)) {
@@ -1708,6 +1875,9 @@ export function plannedFiles(data, root) {
   const [materialized, materializationErrors] = materializedFiles(data, root);
   files.push(...materialized);
   errors.push(...materializationErrors);
+  const [agentsPlan, agentsErrors] = _agentsMdPlan(data, root);
+  files.push(...agentsPlan);
+  errors.push(...agentsErrors);
   const tomlPlan = packageModeAkmonToml(root);
   if (tomlPlan !== null) {
     files.push(tomlPlan);
@@ -1969,7 +2139,12 @@ export function checkFindings(data, result, { root }) {
   for (const [paths, key, severity, code] of groups) {
     for (const path of paths) {
       const relative = _relativeTo(path, root);
-      const [message, fix] = one(key, relative);
+      let [message, fix] = one(key, relative);
+      if (key === "stale" && path === pyPath(root, "AGENTS.md")) {
+        const region = importsRegion(data, importBase(root)).join(" ");
+        message = fill(texts.stale_imports_region.message, { relative, lines: region });
+        fix = texts.stale_imports_region.fix;
+      }
       findings.push(
         new Finding({ severity, code, message: lineSafe(message), target: lineSafe(relative), fix, data: record }),
       );

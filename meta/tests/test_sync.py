@@ -686,7 +686,8 @@ def test_sync_data_pins_its_structure():
         "planned_files",
         "skill_stubs",
         "skill_stub_dirs",
-        "always_materialized",
+        "always_imported",
+        "imports_region",
         "moved_imports",
         # the language → profile map init writes a fresh block from and verify checks against (C127)
         "language_profiles",
@@ -749,7 +750,8 @@ def test_sync_data_pins_its_structure():
         "---\n# {{banner}}\n{{frontmatter}}\n---\n\n# {{name}}\n\n{{body}}"
     )
     assert _SYNC_DATA["skill_stub_dirs"] == [".claude/skills", ".agents/skills"]
-    assert _SYNC_DATA["always_materialized"] == "guardrails/_common.md"
+    assert _SYNC_DATA["always_imported"] == ["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"]
+    assert _SYNC_DATA["imports_region"] == {"open": "<!-- akmon:imports -->", "close": "<!-- /akmon:imports -->"}
     assert _SYNC_DATA["moved_imports"] == {"guardrails/python.md": "profiles/python.md"}
     assert _SYNC_DATA["ruff_configs"][0] == ["pyproject.toml", ["tool", "ruff"]]
     assert _SYNC_DATA["check_findings"]["stale"]["message"] == "generated file is stale or missing: {{relative}}"
@@ -927,3 +929,167 @@ def test_has_python_walks_outside_a_work_tree_skipping_dev_layer_node_modules_do
     assert sync.has_python(tmp_path, _SYNC_DATA, "tools/ai")
     bounded = {**_SYNC_DATA, "python_markers": {**_SYNC_DATA["python_markers"], "walk_limit": 3}}
     assert not sync.has_python(tmp_path, bounded, "tools/ai"), "the walk stopped first"
+
+
+# --------------------------------------------------------------------------------------
+# the akmon block's managed imports region (ADR 0018/D02 amendment)
+# --------------------------------------------------------------------------------------
+
+_REGION_OPEN = "<!-- akmon:imports -->"
+_REGION_CLOSE = "<!-- /akmon:imports -->"
+_HEADING = "## Dev layer — akmon"
+
+
+def _region(base: str = "_aitna/akmon") -> str:
+    """The expected region text for ``base``, one trailing newline."""
+    lines = [_REGION_OPEN, *(f"@{base}/{name}" for name in _SYNC_DATA["always_imported"]), _REGION_CLOSE]
+    return "\n".join(lines) + "\n"
+
+
+def _agents_root(tmp_path: Path, agents_md: str) -> Path:
+    """A mounted project whose mount ships the standard's rule files and profiles, so no import dangles."""
+    root = _make_root(tmp_path)
+    (root / "AGENTS.md").write_text(agents_md, encoding="utf-8")
+    for name in [*_SYNC_DATA["always_imported"], "profiles/python.md", "profiles/js.md"]:
+        _put(root, f"_aitna/akmon/{name}", "# Rule\n")
+    return root
+
+
+def test_imports_region_is_the_markers_around_one_import_per_always_imported_file():
+    assert sync.imports_region("_aitna/akmon") == [
+        _REGION_OPEN,
+        "@_aitna/akmon/guardrails/_common.md",
+        "@_aitna/akmon/rules/collaboration.md",
+        "@_aitna/akmon/rules/templates.md",
+        _REGION_CLOSE,
+    ]
+    assert sync.imports_region("tools/ai/.akmon")[1] == "@tools/ai/.akmon/guardrails/_common.md"
+
+
+def test_import_base_follows_the_mode_and_the_dev_root(tmp_path):
+    root = _make_root(tmp_path)
+    assert sync.import_base(root) == "_aitna/akmon"
+    assert sync.import_prefix(root) == "@_aitna/akmon/"
+    (root / "_aitna" / ".akmon.toml").write_text('mount = "package"\n', encoding="utf-8")
+    assert sync.import_base(root) == "_aitna/.akmon"
+
+
+def test_sync_rewrites_the_body_of_an_existing_region(tmp_path):
+    text = (
+        f"# AGENTS.md\n\n{_HEADING}\n\nHand-owned prose.\n\n{_REGION_OPEN}\n@_aitna/akmon/guardrails/_common.md\n"
+        f"@somewhere/else.md\n{_REGION_CLOSE}\n@_aitna/akmon/profiles/python.md\n\n## Peer\n\nKept.\n"
+    )
+    root = _agents_root(tmp_path, text)
+    expected = text.replace(
+        f"{_REGION_OPEN}\n@_aitna/akmon/guardrails/_common.md\n@somewhere/else.md\n{_REGION_CLOSE}\n", _region()
+    )
+    assert sync.sync_imports_region(text, root) == expected
+    files, errors = sync._planned_files(root)
+    assert errors == []
+    assert [planned.content for planned in files if planned.path == root / "AGENTS.md"] == [expected]
+    assert sync.main(["--project-root", str(root)]) == 0
+    assert (root / "AGENTS.md").read_text(encoding="utf-8") == expected
+    assert sync.main(["--project-root", str(root), "--check"]) == 0  # a second pass finds nothing to do
+
+
+def test_sync_migrates_the_single_common_import_into_the_region(tmp_path):
+    text = (
+        f"# AGENTS.md\n\n{_HEADING}\n\nProse.\n\n"
+        "@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/python.md\n"
+    )
+    root = _agents_root(tmp_path, text)
+    assert sync.sync_imports_region(text, root) == (
+        f"# AGENTS.md\n\n{_HEADING}\n\nProse.\n\n{_region()}@_aitna/akmon/profiles/python.md\n"
+    )
+
+
+def test_sync_migration_folds_every_hand_written_rule_import_into_the_one_region(tmp_path):
+    text = (
+        f"{_HEADING}\n\n@_aitna/akmon/guardrails/_common.md\nprose\n@_aitna/akmon/rules/templates.md\n"
+        "@_aitna/akmon/profiles/js.md\n"
+    )
+    root = _agents_root(tmp_path, text)
+    assert sync.sync_imports_region(text, root) == f"{_HEADING}\n\n{_region()}prose\n@_aitna/akmon/profiles/js.md\n"
+
+
+def test_sync_migration_leaves_a_quoted_or_fenced_import_alone(tmp_path):
+    text = (
+        f"{_HEADING}\n\nSee `@_aitna/akmon/guardrails/_common.md`.\n\n```\n@_aitna/akmon/guardrails/_common.md\n```\n\n"
+        "@_aitna/akmon/profiles/js.md\n"
+    )
+    root = _agents_root(tmp_path, text)
+    synced = sync.sync_imports_region(text, root)
+    assert synced == text.replace("@_aitna/akmon/profiles/js.md\n", _region() + "@_aitna/akmon/profiles/js.md\n")
+
+
+def test_sync_inserts_the_region_before_the_first_profile_import_when_no_rule_line_exists(tmp_path):
+    text = f"# AGENTS.md\n\n{_HEADING}\n\nProse.\n\n@_aitna/akmon/profiles/python.md\n@_aitna/akmon/profiles/js.md\n"
+    root = _agents_root(tmp_path, text)
+    assert sync.sync_imports_region(text, root) == (
+        f"# AGENTS.md\n\n{_HEADING}\n\nProse.\n\n{_region()}@_aitna/akmon/profiles/python.md\n"
+        "@_aitna/akmon/profiles/js.md\n"
+    )
+
+
+def test_sync_appends_the_region_to_the_end_of_the_block_when_there_is_no_anchor_line(tmp_path):
+    text = f"# AGENTS.md\n\n{_HEADING}\n\nHand-tuned block.\n\n## Peer\n\nKept.\n"
+    root = _agents_root(tmp_path, text)
+    assert sync.sync_imports_region(text, root) == (
+        f"# AGENTS.md\n\n{_HEADING}\n\nHand-tuned block.\n\n{_region()}\n## Peer\n\nKept.\n"
+    )
+
+
+def test_sync_appends_to_a_block_that_ends_the_file_without_a_final_newline(tmp_path):
+    text = f"{_HEADING}\n\nHand-tuned block."
+    root = _agents_root(tmp_path, text)
+    assert sync.sync_imports_region(text, root) == f"{text}\n\n{_region().rstrip()}"
+
+
+def test_sync_leaves_agents_md_without_an_akmon_block_alone(tmp_path):
+    text = "# AGENTS.md\n\n@_aitna/akmon/guardrails/_common.md\n"
+    root = _agents_root(tmp_path, text)
+    assert sync.sync_imports_region(text, root) == text
+    files, errors = sync._planned_files(root)
+    assert errors == []
+    assert root / "AGENTS.md" not in {planned.path for planned in files}
+    assert sync.main(["--project-root", str(root)]) == 0
+    assert (root / "AGENTS.md").read_text(encoding="utf-8") == text
+
+
+def test_sync_reports_an_unbalanced_region_as_a_plan_error_and_writes_nothing(tmp_path):
+    text = f"{_HEADING}\n\n{_REGION_OPEN}\n@_aitna/akmon/guardrails/_common.md\n"
+    root = _agents_root(tmp_path, text)
+    with pytest.raises(ValueError, match="unbalanced imports region"):
+        sync.sync_imports_region(text, root)
+    _, errors = sync._planned_files(root)
+    assert len(errors) == 1
+    assert "unbalanced imports region" in errors[0]
+    assert sync.main(["--project-root", str(root)]) == 2
+    assert (root / "AGENTS.md").read_text(encoding="utf-8") == text
+
+
+def test_sync_re_points_the_region_when_the_mode_changes(tmp_path):
+    text = f"{_HEADING}\n\n{_region('_aitna/akmon')}@_aitna/akmon/profiles/python.md\n"
+    root = _agents_root(tmp_path, text)
+    (root / "_aitna" / ".akmon.toml").write_text('mount = "package"\n', encoding="utf-8")
+    synced = sync.sync_imports_region(text, root)
+    assert synced.startswith(f"{_HEADING}\n\n{_region('_aitna/.akmon')}")
+    assert synced.endswith("@_aitna/akmon/profiles/python.md\n")  # the profile line is hand-owned
+
+
+def test_sync_check_names_the_expected_lines_when_the_region_drifted(tmp_path, capsys):
+    text = f"{_HEADING}\n\n{_REGION_OPEN}\n@_aitna/akmon/guardrails/_common.md\n{_REGION_CLOSE}\n"
+    root = _agents_root(tmp_path, text)
+    assert sync.main(["--project-root", str(root), "--check"]) == 1
+    out = capsys.readouterr().out
+    line = next(line for line in out.splitlines() if "AGENTS.md" in line and "sync.stale-generated" in line)
+    assert line.startswith("ERROR sync.stale-generated ")
+    for expected in sync.imports_region("_aitna/akmon"):
+        assert expected in line
+    assert (root / "AGENTS.md").read_text(encoding="utf-8") == text  # --check writes nothing
+
+
+def test_sync_check_flags_a_block_with_no_region_at_all(tmp_path, capsys):
+    root = _agents_root(tmp_path, f"{_HEADING}\n\n@_aitna/akmon/guardrails/_common.md\n")
+    assert sync.main(["--project-root", str(root), "--check"]) == 1
+    assert "sync.stale-generated" in capsys.readouterr().out

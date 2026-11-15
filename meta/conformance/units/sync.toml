@@ -530,371 +530,371 @@ id = "imported/no-agents"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/empty-agents"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/one-profile"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/common-twice"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/guardrails/_common.md\n@_aitna/.akmon/guardrails/_common.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/two-profiles-sorted"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/quant.md\n@_aitna/.akmon/profiles/python.md\n@_aitna/.akmon/guardrails/_common.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/unknown"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/nothing.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/nothing.md"], ["AGENTS.md imports a file the standard does not ship: profiles/nothing.md"]]'
+expected_json = '[["guardrails/_common.md", "profiles/nothing.md", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports a file the standard does not ship: profiles/nothing.md"]]'
 
 [[case]]
 id = "imported/unknown-and-known"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/python.md\n@_aitna/.akmon/guardrails/zzz.md\n@_aitna/.akmon/profiles/aaa.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "guardrails/zzz.md", "profiles/aaa.md", "profiles/python.md"], ["AGENTS.md imports a file the standard does not ship: guardrails/zzz.md", "AGENTS.md imports a file the standard does not ship: profiles/aaa.md"]]'
+expected_json = '[["guardrails/_common.md", "guardrails/zzz.md", "profiles/aaa.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports a file the standard does not ship: guardrails/zzz.md", "AGENTS.md imports a file the standard does not ship: profiles/aaa.md"]]'
 
 [[case]]
 id = "imported/moved"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/guardrails/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "guardrails/python.md"], ["AGENTS.md imports guardrails/python.md, which the standard moved to profiles/python.md: replace the line with @_aitna/.akmon/profiles/python.md"]]'
+expected_json = '[["guardrails/_common.md", "guardrails/python.md", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports guardrails/python.md, which the standard moved to profiles/python.md: replace the line with @_aitna/.akmon/profiles/python.md"]]'
 
 [[case]]
 id = "imported/moved-and-fine"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/guardrails/python.md\n@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "guardrails/python.md", "profiles/python.md"], ["AGENTS.md imports guardrails/python.md, which the standard moved to profiles/python.md: replace the line with @_aitna/.akmon/profiles/python.md"]]'
+expected_json = '[["guardrails/_common.md", "guardrails/python.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports guardrails/python.md, which the standard moved to profiles/python.md: replace the line with @_aitna/.akmon/profiles/python.md"]]'
 
 [[case]]
 id = "imported/dotdot-name"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/guardrails/..\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/..", "guardrails/_common.md"], ["AGENTS.md imports a file the standard does not ship: guardrails/.."]]'
+expected_json = '[["guardrails/..", "guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports a file the standard does not ship: guardrails/.."]]'
 
 [[case]]
 id = "imported/dot-name"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/.\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/."], ["AGENTS.md imports a file the standard does not ship: profiles/."]]'
+expected_json = '[["guardrails/_common.md", "profiles/.", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports a file the standard does not ship: profiles/."]]'
 
 [[case]]
 id = "imported/trailing-punctuation"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "See @_aitna/.akmon/profiles/python.md, then @_aitna/.akmon/profiles/quant.md.\n(@_aitna/.akmon/profiles/python-stdlib.md)\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python-stdlib.md", "profiles/python.md", "profiles/quant.md."], ["AGENTS.md imports a file the standard does not ship: profiles/quant.md."]]'
+expected_json = '[["guardrails/_common.md", "profiles/python-stdlib.md", "profiles/python.md", "profiles/quant.md.", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports a file the standard does not ship: profiles/quant.md."]]'
 
 [[case]]
 id = "imported/same-line-glued"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/python.md@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/wrong-directory"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/other/python.md\n@_aitna/.akmon/profiles\n@_aitna/.akmon/profiles/\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/mount-prefix-ignored-in-package"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/unicode-name-stops"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/pyé.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/py"], ["AGENTS.md imports a file the standard does not ship: profiles/py"]]'
+expected_json = '[["guardrails/_common.md", "profiles/py", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports a file the standard does not ship: profiles/py"]]'
 
 [[case]]
 id = "imported/name-chars"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/a.b_c-d9\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/a.b_c-d9"], ["AGENTS.md imports a file the standard does not ship: profiles/a.b_c-d9"]]'
+expected_json = '[["guardrails/_common.md", "profiles/a.b_c-d9", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports a file the standard does not ship: profiles/a.b_c-d9"]]'
 
 [[case]]
 id = "imported/fenced-backticks"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\n```\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-tildes"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "~~~\n@_aitna/.akmon/profiles/python.md\n~~~\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-lang-tag"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```markdown\n@_aitna/.akmon/profiles/python.md\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-unclosed"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-unclosed-after-import"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/quant.md\n```\n@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-close-with-text"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\n``` closing words\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-mismatched-closer"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\n~~~\n@_aitna/.akmon/profiles/quant.md\n```\n@_aitna/.akmon/profiles/python-stdlib.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python-stdlib.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python-stdlib.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-four-backticks"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "````\n@_aitna/.akmon/profiles/python.md\n````\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-indented-is-not-fence"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "  ```\n@_aitna/.akmon/profiles/python.md\n  ```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-midline-is-not-fence"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "text ``` @_aitna/.akmon/profiles/python.md ``` more\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-at-eof-no-newline"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/quant.md\n```", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-fence-only"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-adjacent-blocks"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\n```\n```\n@_aitna/.akmon/profiles/quant.md\n```\n@_aitna/.akmon/profiles/python-stdlib.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python-stdlib.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python-stdlib.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-tilde-inside-backtick"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\n~~~\n@_aitna/.akmon/profiles/python.md\n~~~\n```\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-crlf"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\u000d\n@_aitna/.akmon/profiles/python.md\u000d\n```\u000d\n@_aitna/.akmon/profiles/quant.md\u000d\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-cr-only"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\u000d@_aitna/.akmon/profiles/python.md\u000d```\u000d@_aitna/.akmon/profiles/quant.md\u000d", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-u2028-is-not-a-line"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "text\u2028```\n@_aitna/.akmon/profiles/python.md\n```\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-u2028-before-closer"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/python.md\u2028```\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-vt-ff-are-not-lines"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "a\u000b```\n@_aitna/.akmon/profiles/python.md\n```\u000c@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-nel-is-not-a-line"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "a\u0085```\n@_aitna/.akmon/profiles/python.md\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-fs-gs-are-not-lines"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "a\u001c```\n@_aitna/.akmon/profiles/python.md\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/fenced-bom-first-line"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "\ufeff```\n@_aitna/.akmon/profiles/python.md\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/inline-code-strips"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "`@_aitna/.akmon/profiles/python.md` and @_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/inline-code-unclosed"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "`@_aitna/.akmon/profiles/python.md\n@_aitna/.akmon/profiles/quant.md`\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/inline-code-spans-two-lines-not"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "`a\n@_aitna/.akmon/profiles/python.md\nb`\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/inline-code-empty-span"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "`` @_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/inline-code-double-backtick"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "``@_aitna/.akmon/profiles/python.md`` @_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/inline-code-in-fence"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\n`@_aitna/.akmon/profiles/python.md`\n```\n@_aitna/.akmon/profiles/quant.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/quant.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/quant.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/inline-code-around-fence-open"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "`x` ```\n@_aitna/.akmon/profiles/python.md\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/crlf-file"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "# A\u000d\n\u000d\n@_aitna/.akmon/profiles/python.md\u000d\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/cr-only-file"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "# A\u000d\u000d@_aitna/.akmon/profiles/python.md\u000d", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/u2028-file"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "# A\u2028@_aitna/.akmon/profiles/python.md\u2028", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/unicode-prose"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "日本語 😀 @_aitna/.akmon/profiles/python.md é\n```\n😀\n```\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/bom-file"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "\ufeff# A\n@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/long-line"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx @_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/many-fences"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "```\n@_aitna/.akmon/profiles/aaa0.md\n```\n```\n@_aitna/.akmon/profiles/aaa1.md\n```\n```\n@_aitna/.akmon/profiles/aaa2.md\n```\n```\n@_aitna/.akmon/profiles/aaa3.md\n```\n```\n@_aitna/.akmon/profiles/aaa4.md\n```\n```\n@_aitna/.akmon/profiles/aaa5.md\n```\n```\n@_aitna/.akmon/profiles/aaa6.md\n```\n```\n@_aitna/.akmon/profiles/aaa7.md\n```\n```\n@_aitna/.akmon/profiles/aaa8.md\n```\n```\n@_aitna/.akmon/profiles/aaa9.md\n```\n```\n@_aitna/.akmon/profiles/aaa10.md\n```\n```\n@_aitna/.akmon/profiles/aaa11.md\n```\n```\n@_aitna/.akmon/profiles/aaa12.md\n```\n```\n@_aitna/.akmon/profiles/aaa13.md\n```\n```\n@_aitna/.akmon/profiles/aaa14.md\n```\n```\n@_aitna/.akmon/profiles/aaa15.md\n```\n```\n@_aitna/.akmon/profiles/aaa16.md\n```\n```\n@_aitna/.akmon/profiles/aaa17.md\n```\n```\n@_aitna/.akmon/profiles/aaa18.md\n```\n```\n@_aitna/.akmon/profiles/aaa19.md\n```\n```\n@_aitna/.akmon/profiles/aaa20.md\n```\n```\n@_aitna/.akmon/profiles/aaa21.md\n```\n```\n@_aitna/.akmon/profiles/aaa22.md\n```\n```\n@_aitna/.akmon/profiles/aaa23.md\n```\n```\n@_aitna/.akmon/profiles/aaa24.md\n```\n```\n@_aitna/.akmon/profiles/aaa25.md\n```\n```\n@_aitna/.akmon/profiles/aaa26.md\n```\n```\n@_aitna/.akmon/profiles/aaa27.md\n```\n```\n@_aitna/.akmon/profiles/aaa28.md\n```\n```\n@_aitna/.akmon/profiles/aaa29.md\n```\n```\n@_aitna/.akmon/profiles/aaa30.md\n```\n```\n@_aitna/.akmon/profiles/aaa31.md\n```\n```\n@_aitna/.akmon/profiles/aaa32.md\n```\n```\n@_aitna/.akmon/profiles/aaa33.md\n```\n```\n@_aitna/.akmon/profiles/aaa34.md\n```\n```\n@_aitna/.akmon/profiles/aaa35.md\n```\n```\n@_aitna/.akmon/profiles/aaa36.md\n```\n```\n@_aitna/.akmon/profiles/aaa37.md\n```\n```\n@_aitna/.akmon/profiles/aaa38.md\n```\n```\n@_aitna/.akmon/profiles/aaa39.md\n```\n@_aitna/.akmon/profiles/python.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/no-record-mounted-prefix"
@@ -929,182 +929,182 @@ id = "imported/custom-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { ".aitna-root" = "tools/ai", "tools/ai/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@tools/ai/.akmon/profiles/python.md\n@_aitna/.akmon/profiles/quant.md\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/custom-root-slashes"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { ".aitna-root" = "x/", "x/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@x/.akmon/profiles/python.md\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/regex-special-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { ".aitna-root" = "a.b+c", "a.b+c/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a.b+c/.akmon/profiles/python.md\n@aXb+c/.akmon/profiles/quant.md\n@a.b+cc/.akmon/profiles/python-stdlib.md\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/regex-bracket-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { ".aitna-root" = "a[b]", "a[b]/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a[b]/.akmon/profiles/python.md\n@ab/.akmon/profiles/quant.md\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/regex-paren-dollar-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { ".aitna-root" = "(x)$", "(x)$/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@(x)$/.akmon/profiles/python.md\n@x/.akmon/profiles/quant.md\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/regex-backslash-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { ".aitna-root" = "a\\b", "a\\b/.akmon.toml" = "mount = \"package\"\n", "AGENTS.md" = "@a\\b/.akmon/profiles/python.md\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/record-lenient-parse"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "_aitna/.akmon.toml" = "mount = package\n", "AGENTS.md" = "@_aitna/.akmon/profiles/python.md\n" }
-expected_json = '[["guardrails/_common.md", "profiles/python.md"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/sorted-by-code-point"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "AGENTS.md" = "@_aitna/.akmon/profiles/b.md\n@_aitna/.akmon/profiles/B.md\n@_aitna/.akmon/profiles/a-b\n@_aitna/.akmon/profiles/a.b\n@_aitna/.akmon/profiles/a_b\n@_aitna/.akmon/profiles/a0\n@_aitna/.akmon/profiles/_x\n@_aitna/.akmon/guardrails/_common.md\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/B.md", "profiles/_x", "profiles/a-b", "profiles/a.b", "profiles/a0", "profiles/a_b", "profiles/b.md"], ["AGENTS.md imports a file the standard does not ship: profiles/B.md", "AGENTS.md imports a file the standard does not ship: profiles/_x", "AGENTS.md imports a file the standard does not ship: profiles/a-b", "AGENTS.md imports a file the standard does not ship: profiles/a.b", "AGENTS.md imports a file the standard does not ship: profiles/a0", "AGENTS.md imports a file the standard does not ship: profiles/a_b", "AGENTS.md imports a file the standard does not ship: profiles/b.md"]]'
+expected_json = '[["guardrails/_common.md", "profiles/B.md", "profiles/_x", "profiles/a-b", "profiles/a.b", "profiles/a0", "profiles/a_b", "profiles/b.md", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports a file the standard does not ship: profiles/B.md", "AGENTS.md imports a file the standard does not ship: profiles/_x", "AGENTS.md imports a file the standard does not ship: profiles/a-b", "AGENTS.md imports a file the standard does not ship: profiles/a.b", "AGENTS.md imports a file the standard does not ship: profiles/a0", "AGENTS.md imports a file the standard does not ship: profiles/a_b", "AGENTS.md imports a file the standard does not ship: profiles/b.md"]]'
 
 [[case]]
 id = "imported/ruff-pyproject"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "pyproject.toml" = "[tool.ruff]\nextend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/ruff.toml", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-toml"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/ruff.toml", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-dot-toml"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { ".ruff.toml" = "extend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/ruff.toml", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-all-three-origins"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "pyproject.toml" = "[tool.ruff]\nextend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "ruff.toml" = "extend = \"_aitna/.akmon/profiles/gone.toml\"\n", ".ruff.toml" = "extend = \"_aitna/.akmon/profiles/gone2.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/gone.toml", "profiles/gone2.toml", "profiles/ruff.toml"], ["ruff.toml extends a file the standard does not ship: profiles/gone.toml", ".ruff.toml extends a file the standard does not ship: profiles/gone2.toml"]]'
+expected_json = '[["guardrails/_common.md", "profiles/gone.toml", "profiles/gone2.toml", "profiles/ruff.toml", "rules/collaboration.md", "rules/templates.md"], ["ruff.toml extends a file the standard does not ship: profiles/gone.toml", ".ruff.toml extends a file the standard does not ship: profiles/gone2.toml"]]'
 
 [[case]]
 id = "imported/ruff-agents-import-wins-origin"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "AGENTS.md" = "@_aitna/.akmon/profiles/ruff.toml\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/ruff.toml", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-agents-missing-import-origin"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \"_aitna/.akmon/profiles/gone.toml\"\n", "AGENTS.md" = "@_aitna/.akmon/profiles/gone.toml\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/gone.toml"], ["AGENTS.md imports a file the standard does not ship: profiles/gone.toml"]]'
+expected_json = '[["guardrails/_common.md", "profiles/gone.toml", "rules/collaboration.md", "rules/templates.md"], ["AGENTS.md imports a file the standard does not ship: profiles/gone.toml"]]'
 
 [[case]]
 id = "imported/ruff-outside-prefix"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \"../shared/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-wrong-dir"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \"_aitna/.akmon/elsewhere/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-bare-dirname"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \"_aitna/.akmon/profiles\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles"], ["ruff.toml extends a file the standard does not ship: profiles"]]'
+expected_json = '[["guardrails/_common.md", "profiles", "rules/collaboration.md", "rules/templates.md"], ["ruff.toml extends a file the standard does not ship: profiles"]]'
 
 [[case]]
 id = "imported/ruff-moved-guardrail"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \"_aitna/.akmon/guardrails/python.md\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md", "guardrails/python.md"], ["ruff.toml extends guardrails/python.md, which the standard moved to profiles/python.md: replace the line with _aitna/.akmon/profiles/python.md"]]'
+expected_json = '[["guardrails/_common.md", "guardrails/python.md", "rules/collaboration.md", "rules/templates.md"], ["ruff.toml extends guardrails/python.md, which the standard moved to profiles/python.md: replace the line with _aitna/.akmon/profiles/python.md"]]'
 
 [[case]]
 id = "imported/ruff-mount-prefix-in-package"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \"_aitna/akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-not-string"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = 5\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-invalid-toml"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \n= =\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-bom"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "\ufeffextend = \"_aitna/.akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-bare-relative-dir-is-not-the-standard"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \"profiles/ruff.toml\"\n", "pyproject.toml" = "[tool.ruff]\nextend = \"guardrails/gone.md\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-with-at-sign-is-not-a-path"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml" = "extend = \"@_aitna/.akmon/profiles/ruff.toml\"\n", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-ruff-toml-is-dir"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { "ruff.toml/x" = "y", "_aitna/.akmon.toml" = "mount = \"package\"\n" }
-expected_json = '[["guardrails/_common.md"], []]'
+expected_json = '[["guardrails/_common.md", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "imported/ruff-custom-root"
 fn = "imported_standard_files"
 args_json = '[{"$path": "{{dir}}"}]'
 files = { ".aitna-root" = "tools/ai", "tools/ai/.akmon.toml" = "mount = \"package\"\n", "ruff.toml" = "extend = \"tools/ai/.akmon/profiles/ruff.toml\"\n" }
-expected_json = '[["guardrails/_common.md", "profiles/ruff.toml"], []]'
+expected_json = '[["guardrails/_common.md", "profiles/ruff.toml", "rules/collaboration.md", "rules/templates.md"], []]'
 
 [[case]]
 id = "ruff-extends/none"

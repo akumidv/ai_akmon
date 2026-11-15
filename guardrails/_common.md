@@ -4,23 +4,13 @@ Hard rules that bind **every** agent on **every** project, regardless of languag
 automatically. They are **constraints**, the floor: pipelines say *how* to work, and
 [profiles/](../profiles/) layer language, environment and domain rules on top.
 
-## Language — artifacts English, chat in the user's language
-
-Two distinct surfaces, two **rules** (not a default and a permission):
+## Language — artifacts English
 
 - **Persistent artifacts → always English.** Documentation, agent instructions, skills,
   memory notes, ADRs, development/architecture plans, code comments, commit messages. This
   holds **regardless of the language the user wrote in** — artifacts are read by every future
-  agent, so they stay in one canonical language.
-- **Chat replies → match the user's language.** Reply in the language the user wrote their
-  message in. User writes Russian → reply in Russian; writes English → reply in English.
-  A prompt the user carries to another session is chat too.
-- **A reply's section headings stay English** — `Findings`, `Options`, `Recommendation` name
-  the material the standard's own checks count, so they are structure, not prose. The prose
-  under them follows the user's language.
-
-These do **not** conflict and must not bleed: analyze and write files in English, then reply in
-the language of the user's last message — never in the language of your own reasoning.
+  agent, so they stay in one canonical language. Chat follows the owner's language
+  ([collaboration](../rules/collaboration.md)); the two must not bleed.
 
 ## Secrets
 
@@ -89,22 +79,8 @@ offered" and "branch for non-trivial work" are not machine-checked.
   unchanged design again. Passing tests and plausibility are necessary, not sufficient.
 - **Knowledge no source gives is gathered with the user; a math question to the owner first gathers
   how the industry does it** ([knowledge-lookup](../pipelines/knowledge-lookup.md)).
-- **Owner decision requests (every role):** use stable **D-TOPIC** codes (**D-C139-TOPIC** when the
-  request belongs to a task), following
-  [design-flow § Decision requests](../pipelines/design-flow.md#decision-requests).
-- **A code in a reply to the owner carries its gist.** A task id (`C138`) or a decision code
-  (`D-ORDER`) is followed by 3–5 words saying what it is — up to 10 for a complex task — and a verdict
-  is stated as the action to take, not as a label.
-- **Collect the asks at the end, each one decidable alone.** A reply that asks for or leaves pending
-  an owner action ends with one `Needed from you` block and nothing after it, grouped under `Decide`
-  and `Act`. Each request is one numbered item that decides correctly when read alone: its code and
-  gist, `Essence`, `Options` each with its cost and weak spot, `Recommendation` with its reason (or
-  marked short, with the full reasoning in the body), `After` when order matters. The body argues a
-  question, under a heading with its code, only when its reasoning does not fit the item or it is
-  asked again in a later message. No default: an unanswered item stays open; `all as recommended`
-  accepts the recommended decisions, never an action — a write, commit, push, release, run or supply
-  is closed only by its own code. A term new to the owner gets plain words
-  ([design-flow § Where requests sit in a reply](../pipelines/design-flow.md#where-requests-sit-in-a-reply)).
+- **Requests to the owner** — codes, the closing `Needed from you` block, the owner's answers — follow
+  [collaboration](../rules/collaboration.md), loaded at session start.
 
 ## Analysis before mutation
 

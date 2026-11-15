@@ -90,6 +90,8 @@ def _make_project(tmp_path: Path) -> Path:
         "agents/learning.md",
         "agents/release.md",
         "guardrails/_common.md",
+        "rules/collaboration.md",
+        "rules/templates.md",
         "pipelines/pre-commit.md",
         "pipelines/code-flow.md",
         "pipelines/design-flow.md",

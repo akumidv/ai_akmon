@@ -89,8 +89,9 @@ import {
   hasPython,
   installedAkmonVersion,
   main as syncMain,
-  packagePinStatus,
+  importsRegion,
   languageProfiles,
+  packagePinStatus,
   readSyncData,
   ruffTomlTemplates,
   unsupportedFound,
@@ -1022,7 +1023,7 @@ export function mergeGitignore(existing, wanted) {
  * The AGENTS.md akmon block (`init.json`); links and fragments computed here. In package mode links
  * name the GitHub repository at the pinned ref (there is no tree in the project to point at), in a
  * mounted mode the mount. `profiles` are the language profiles to import (`js.md`), one line each
- * right after the common guardrail, under the attach's prefix.
+ * right after the imports region, under the attach's prefix.
  * @param {InitData} data
  * @param {{aitna: string, repo: string, ref: string, archetype: string, language: string, profiles: readonly string[], mounted: boolean}} fields
  * @returns {string}
@@ -1047,7 +1048,7 @@ function _agentsBlock(data, { aitna, repo, ref, archetype, language, profiles, m
     aitna,
     shared_layer: sharedLayer,
     roles_hint: rolesHint,
-    guardrails_dir: `${base}/guardrails`,
+    imports_region: importsRegion(readSyncData(), base).join("\n"),
     profiles_dir: `${base}/profiles`,
     profile_imports: profiles.map((profile) => `\n@${base}/profiles/${profile}`).join(""),
     pre_commit: link("pipelines/pre-commit.md"),

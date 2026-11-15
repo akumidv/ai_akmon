@@ -23,7 +23,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from common import always_loaded
+from common import always_loaded, materialization
 from common.findings import Finding
 
 #: Only the link text varies with the pin, a few bytes over the whole block.
@@ -61,7 +61,7 @@ def shipped_population(akmon_root: Path) -> always_loaded.Population:
         root = Path(tmp)
         mount = root / _AITNA / ".akmon"
         mount.mkdir(parents=True)
-        for directory in ("guardrails", "profiles"):
+        for directory in materialization.imported_dirs():
             shutil.copytree(akmon_root / directory, mount / directory)
         (root / "AGENTS.md").write_text(agents, encoding="utf-8")
         selected = mount / "profiles" / _largest_profile(akmon_root).name

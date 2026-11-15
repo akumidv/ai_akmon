@@ -91,7 +91,7 @@ def _expected_dev_imports() -> set[str]:
 def test_the_dev_layer_imports_exactly_what_the_archetype_map_prescribes():
     """C10: akmon ships JS too, so the `js` profile is owed an import like `python` is."""
     imports = set(re.findall(r"^@(\S+)$", _AGENTS.read_text(encoding="utf-8"), re.MULTILINE))
-    expected = _expected_dev_imports()
+    expected = _expected_dev_imports() | set(sync.always_imported())
     assert {"guardrails/_common.md", "profiles/python.md", "profiles/js.md"} <= expected
     assert imports == expected
 

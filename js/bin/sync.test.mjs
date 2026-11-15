@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   PlannedFile,
+  alwaysImported,
   apply,
   checkFindings,
   claudeHooks,
@@ -23,7 +24,9 @@ import {
   codexHooks,
   codexHooksText,
   hasPython,
+  importBase,
   importedStandardFiles,
+  importsRegion,
   installedAkmonVersion,
   isAkmonEntry,
   languageProfiles,
@@ -40,6 +43,7 @@ import {
   skillSources,
   skillStubs,
   standardTreeRoot,
+  syncImportsRegion,
   unsupportedFound,
   unsupportedRecord,
   upsertTomlKey,
@@ -965,7 +969,7 @@ test("the dev layer's .akmon directory is owned outright: everything unplanned g
         "deleted: _aitna/.akmon/routing.json",
       ],
     );
-    assert.deepEqual(fs.readdirSync(posix.join(root, "_aitna", ".akmon")), ["guardrails"]);
+    assert.deepEqual(fs.readdirSync(posix.join(root, "_aitna", ".akmon")), ["guardrails", "rules"]);
   });
 });
 
@@ -982,7 +986,7 @@ test("bytecode caches under the materialization are swept silently: no drift, no
     const written = run(["--project-root", root]);
     assert.equal(written.code, 0);
     assert.ok(!written.stdout.includes("deleted: "), written.stdout);
-    assert.deepEqual(fs.readdirSync(posix.join(root, "_aitna", ".akmon")), ["guardrails", "hooks", "p"]);
+    assert.deepEqual(fs.readdirSync(posix.join(root, "_aitna", ".akmon")), ["guardrails", "hooks", "p", "rules"]);
     assert.deepEqual(fs.readdirSync(posix.join(root, "_aitna", ".akmon", "hooks")), []);
   });
 });
@@ -1003,7 +1007,7 @@ test("a link in the materialization is judged by what it points at, and a linked
       ["_aitna/.akmon/dangling", "_aitna/.akmon/filelink"],
     );
     assert.equal(run(["--project-root", root]).code, 0);
-    assert.deepEqual(fs.readdirSync(akmon).sort(), ["dirlink", "guardrails"]);
+    assert.deepEqual(fs.readdirSync(akmon).sort(), ["dirlink", "guardrails", "rules"]);
     assert.equal(fs.readFileSync(posix.join(scratch, "elsewhere", "inner", "f.txt"), "utf-8"), "x\n");
   });
 });
@@ -1078,7 +1082,10 @@ test("an import under a relocated dev layer matches exactly its own prefix", () 
     put(root, "a.b+c/.akmon.toml", 'mount = "package"\n');
     put(root, "AGENTS.md", "@a.b+c/.akmon/profiles/python.md\n@aXb+c/.akmon/profiles/quant.md\n");
     put(root, ".aitna-root", "a.b+c\n");
-    assert.deepEqual(importedStandardFiles(data, root), [["guardrails/_common.md", "profiles/python.md"], []]);
+    assert.deepEqual(importedStandardFiles(data, root), [
+      ["guardrails/_common.md", "profiles/python.md", "rules/collaboration.md", "rules/templates.md"],
+      [],
+    ]);
   });
 });
 
@@ -1095,7 +1102,11 @@ test("the scan reads text the way Python does: CRLF, lone CR and U+2028 are not 
     ])) {
       put(root, "AGENTS.md", text);
       const [found, errors] = importedStandardFiles(data, root);
-      assert.deepEqual(found, ["guardrails/_common.md", ...names], JSON.stringify(text));
+      assert.deepEqual(
+        found,
+        ["guardrails/_common.md", ...names, "rules/collaboration.md", "rules/templates.md"],
+        JSON.stringify(text),
+      );
       assert.deepEqual(errors, []);
     }
   });
@@ -1317,5 +1328,168 @@ test("hasPython: outside a work tree a walk finds sources, skipping the dev laye
     assert.equal(hasPython(data, scratch, "tools/ai"), true);
     const bounded = { sync: { ...data.sync, python_markers: { ...data.sync.python_markers, walk_limit: 3 } } };
     assert.equal(hasPython(/** @type {any} */ (bounded), scratch, "tools/ai"), false, "the walk stopped first");
+  });
+});
+
+// -- the akmon block's managed imports region (ADR 0018/D02 amendment) --------------------------
+
+const OPEN = "<!-- akmon:imports -->";
+const CLOSE = "<!-- /akmon:imports -->";
+const HEADING = "## Dev layer — akmon";
+
+/**
+ * The expected region text for `base`, one trailing newline.
+ * @param {string} [base]
+ */
+function region(base = "_aitna/akmon") {
+  return `${[OPEN, ...alwaysImported(data).map((name) => `@${base}/${name}`), CLOSE].join("\n")}\n`;
+}
+
+/**
+ * A mounted project (the mount is this tree, so every rule file and profile resolves) whose
+ * AGENTS.md is `agents`, and `body` on it.
+ * @param {string} agents
+ * @param {(root: string) => void} body
+ */
+function withAgents(agents, body) {
+  withScratch((scratch) => {
+    const root = mountedProject(scratch);
+    put(root, "AGENTS.md", agents);
+    body(root);
+  });
+}
+
+test("importsRegion is the markers around one import per always-imported file, and importBase follows the mode", () => {
+  assert.deepEqual(importsRegion(data, "_aitna/akmon"), [
+    OPEN,
+    "@_aitna/akmon/guardrails/_common.md",
+    "@_aitna/akmon/rules/collaboration.md",
+    "@_aitna/akmon/rules/templates.md",
+    CLOSE,
+  ]);
+  withScratch((scratch) => {
+    assert.equal(importBase(mountedProject(scratch)), "_aitna/akmon");
+  });
+  withPackageProject((root) => assert.equal(importBase(root), "_aitna/.akmon"));
+});
+
+test("sync rewrites the body of an existing region and leaves the rest of AGENTS.md alone", () => {
+  const text =
+    `# AGENTS.md\n\n${HEADING}\n\nHand-owned prose.\n\n${OPEN}\n@_aitna/akmon/guardrails/_common.md\n` +
+    `@somewhere/else.md\n${CLOSE}\n@_aitna/akmon/profiles/python.md\n\n## Peer\n\nKept.\n`;
+  const expected = text.replace(
+    `${OPEN}\n@_aitna/akmon/guardrails/_common.md\n@somewhere/else.md\n${CLOSE}\n`,
+    region(),
+  );
+  withAgents(text, (root) => {
+    assert.equal(syncImportsRegion(data, text, root), expected);
+    assert.equal(run(["--project-root", root]).code, 0);
+    assert.equal(get(root, "AGENTS.md"), expected);
+    assert.equal(run(["--project-root", root, "--check"]).code, 0, "a second pass finds nothing to do");
+  });
+});
+
+test("sync migrates the single common import into the region and folds hand-written rule imports into it", () => {
+  const single = `# AGENTS.md\n\n${HEADING}\n\nProse.\n\n@_aitna/akmon/guardrails/_common.md\n@_aitna/akmon/profiles/python.md\n`;
+  const several = `${HEADING}\n\n@_aitna/akmon/guardrails/_common.md\nprose\n@_aitna/akmon/rules/templates.md\n@_aitna/akmon/profiles/js.md\n`;
+  const quoted = `${HEADING}\n\nSee \`@_aitna/akmon/guardrails/_common.md\`.\n\n\`\`\`\n@_aitna/akmon/guardrails/_common.md\n\`\`\`\n\n@_aitna/akmon/profiles/js.md\n`;
+  withAgents(single, (root) => {
+    assert.equal(
+      syncImportsRegion(data, single, root),
+      `# AGENTS.md\n\n${HEADING}\n\nProse.\n\n${region()}@_aitna/akmon/profiles/python.md\n`,
+    );
+    assert.equal(
+      syncImportsRegion(data, several, root),
+      `${HEADING}\n\n${region()}prose\n@_aitna/akmon/profiles/js.md\n`,
+    );
+    assert.equal(
+      syncImportsRegion(data, quoted, root),
+      quoted.replace("@_aitna/akmon/profiles/js.md\n", `${region()}@_aitna/akmon/profiles/js.md\n`),
+    );
+  });
+});
+
+test("sync inserts the region before the first profile import, else at the end of the block", () => {
+  const profiles = `# AGENTS.md\n\n${HEADING}\n\nProse.\n\n@_aitna/akmon/profiles/python.md\n@_aitna/akmon/profiles/js.md\n`;
+  const bare = `# AGENTS.md\n\n${HEADING}\n\nHand-tuned block.\n\n## Peer\n\nKept.\n`;
+  const unterminated = `${HEADING}\n\nHand-tuned block.`;
+  withAgents(profiles, (root) => {
+    assert.equal(
+      syncImportsRegion(data, profiles, root),
+      `# AGENTS.md\n\n${HEADING}\n\nProse.\n\n${region()}@_aitna/akmon/profiles/python.md\n@_aitna/akmon/profiles/js.md\n`,
+    );
+    assert.equal(
+      syncImportsRegion(data, bare, root),
+      `# AGENTS.md\n\n${HEADING}\n\nHand-tuned block.\n\n${region()}\n## Peer\n\nKept.\n`,
+    );
+    assert.equal(syncImportsRegion(data, unterminated, root), `${unterminated}\n\n${region().trimEnd()}`);
+  });
+});
+
+test("sync leaves AGENTS.md without an akmon block alone, and re-points the region with the mode", () => {
+  const plain = "# AGENTS.md\n\n@_aitna/akmon/guardrails/_common.md\n";
+  withAgents(plain, (root) => {
+    assert.equal(syncImportsRegion(data, plain, root), plain);
+    const [files] = plannedFiles(data, root);
+    assert.ok(!files.some((planned) => planned.path === posix.join(root, "AGENTS.md")));
+    assert.equal(run(["--project-root", root]).code, 0);
+    assert.equal(get(root, "AGENTS.md"), plain);
+  });
+  const pointed = `${HEADING}\n\n${region("_aitna/akmon")}@_aitna/akmon/profiles/python.md\n`;
+  withPackageProject((root) => {
+    const synced = syncImportsRegion(data, pointed, root);
+    assert.ok(synced.startsWith(`${HEADING}\n\n${region("_aitna/.akmon")}`));
+    assert.ok(synced.endsWith("@_aitna/akmon/profiles/python.md\n"), "the profile line is hand-owned");
+  });
+});
+
+test("sync reports an unbalanced region as a plan error and writes nothing", () => {
+  const text = `${HEADING}\n\n${OPEN}\n@_aitna/akmon/guardrails/_common.md\n`;
+  withAgents(text, (root) => {
+    assert.throws(() => syncImportsRegion(data, text, root), /unbalanced imports region/);
+    const [, errors] = plannedFiles(data, root);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /unbalanced imports region/);
+    assert.equal(run(["--project-root", root]).code, 2);
+    assert.equal(get(root, "AGENTS.md"), text);
+  });
+});
+
+test("sync --check names the expected lines when the region drifted or is missing", () => {
+  const drifted = `${HEADING}\n\n${OPEN}\n@_aitna/akmon/guardrails/_common.md\n${CLOSE}\n`;
+  const missing = `${HEADING}\n\n@_aitna/akmon/guardrails/_common.md\n`;
+  for (const text of [drifted, missing]) {
+    withAgents(text, (root) => {
+      const check = run(["--project-root", root, "--check"]);
+      assert.equal(check.code, 1);
+      const line = check.stdout
+        .split("\n")
+        .find((row) => row.includes("AGENTS.md") && row.includes("sync.stale-generated"));
+      assert.ok(line !== undefined && line.startsWith("ERROR sync.stale-generated "), check.stdout);
+      for (const expected of importsRegion(data, "_aitna/akmon")) {
+        assert.ok(line.includes(expected), expected);
+      }
+      assert.equal(get(root, "AGENTS.md"), text, "--check writes nothing");
+    });
+  }
+});
+
+test("package mode materializes every always-imported file, mount mode none", () => {
+  withPackageProject((root) => {
+    const [files, errors] = plannedFiles(data, root);
+    assert.deepEqual(errors, []);
+    const copied = files
+      .map((planned) => planned.path.slice(root.length + 1))
+      .filter((path) => path.includes("/.akmon/"));
+    for (const name of alwaysImported(data)) {
+      assert.ok(copied.includes(`_aitna/.akmon/${name}`), name);
+    }
+  });
+  withScratch((scratch) => {
+    const [files] = plannedFiles(data, mountedProject(scratch));
+    assert.deepEqual(
+      files.filter((planned) => planned.path.includes("/.akmon/")),
+      [],
+    );
   });
 });

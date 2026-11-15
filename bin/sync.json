@@ -156,7 +156,15 @@
     ".claude/skills",
     ".agents/skills"
   ],
-  "always_materialized": "guardrails/_common.md",
+  "always_imported": [
+    "guardrails/_common.md",
+    "rules/collaboration.md",
+    "rules/templates.md"
+  ],
+  "imports_region": {
+    "open": "<!-- akmon:imports -->",
+    "close": "<!-- /akmon:imports -->"
+  },
   "moved_imports": {
     "guardrails/python.md": "profiles/python.md"
   },
@@ -220,6 +228,10 @@
     "obsolete": {
       "message": "generated file is no longer planned: {{relative}}",
       "fix": "Run akmon sync to delete this file."
+    },
+    "stale_imports_region": {
+      "message": "the akmon imports region of {{relative}} is missing or stale; expected the lines: {{lines}}",
+      "fix": "Run akmon sync to rewrite the region between the akmon:imports markers."
     },
     "up_to_date": {
       "message": "generated file matches its source: {{relative}}",
