@@ -1837,6 +1837,7 @@ const HOOK_DATA_EXPORTS = {
     "roleOnCodeMessage",
     "roleOnCodeResult",
     "analysisBeforeMutationMessage",
+    "spawnForkResult",
     "analysisWriteResult",
     "delegationGrace",
     "delegationNudgeThreshold",

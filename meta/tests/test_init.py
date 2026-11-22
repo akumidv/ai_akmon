@@ -369,10 +369,7 @@ def _init_vendored(root: Path, *extra: str) -> int:
 
 def _region(base: str) -> str:
     """The akmon block's managed imports region as a fresh block writes it, for ``base``."""
-    return (
-        f"<!-- akmon:imports -->\n@{base}/guardrails/_common.md\n@{base}/rules/collaboration.md\n"
-        f"@{base}/rules/templates.md\n@{base}/rules/code.md\n<!-- /akmon:imports -->\n"
-    )
+    return f"<!-- akmon:imports -->\n@{base}/guardrails/_common.md\n@{base}/rules/code.md\n<!-- /akmon:imports -->\n"
 
 
 def test_init_writes_agents_md_when_absent(tmp_path):
@@ -708,6 +705,7 @@ def test_package_attach_verifies_strict_green(tmp_path, monkeypatch):
         "_aitna/.akmon/rules/code.md",
         "_aitna/.akmon/rules/collaboration.md",
         "_aitna/.akmon/rules/templates.md",
+        "_aitna/.akmon/rules/unattended.md",
     ]
     configs = [
         p.read_text(encoding="utf-8") for p in (tmp_path / "pyproject.toml", tmp_path / "ruff.toml") if p.is_file()

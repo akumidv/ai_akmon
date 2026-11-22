@@ -8,13 +8,14 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+
+import { tempDir } from "../../common/temp_dir.test.mjs";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 
@@ -274,27 +275,23 @@ test("a record with no akmon_files list names the gap, then every akmon file as 
 });
 
 test("the walk names files in the record's own relative form, sorted, and follows nothing out", async () => {
-  const root = await mkdtemp(join(tmpdir(), "akmon-vendor-walk-"));
+  const root = tempDir("akmon-vendor-walk-");
   const dir = join(root, "vendor");
   const elsewhere = join(root, "elsewhere");
-  try {
-    await mkdir(join(dir, "dist"), { recursive: true });
-    await mkdir(join(dir, "notes"), { recursive: true });
-    await mkdir(join(elsewhere, "inner"), { recursive: true });
-    await writeFile(join(dir, "LICENSE"), "l");
-    await writeFile(join(dir, "dist", "index.js"), "i");
-    await writeFile(join(elsewhere, "inner", "escape.js"), "e");
-    await symlink(join(elsewhere, "inner"), join(dir, "outside"), "dir");
-    await symlink(join(elsewhere, "inner", "escape.js"), join(dir, "link.js"), "file");
+  await mkdir(join(dir, "dist"), { recursive: true });
+  await mkdir(join(dir, "notes"), { recursive: true });
+  await mkdir(join(elsewhere, "inner"), { recursive: true });
+  await writeFile(join(dir, "LICENSE"), "l");
+  await writeFile(join(dir, "dist", "index.js"), "i");
+  await writeFile(join(elsewhere, "inner", "escape.js"), "e");
+  await symlink(join(elsewhere, "inner"), join(dir, "outside"), "dir");
+  await symlink(join(elsewhere, "inner", "escape.js"), join(dir, "link.js"), "file");
 
-    const listing = await _listing(dir);
-    // `notes/` is unexpected and empty, so it reaches no listing at all: the ledger's silence on
-    // an empty directory is the decision above, not a hole in the walk.
-    assert.deepStrictEqual(listing.files, ["LICENSE", "dist/index.js"]);
-    // Both links are named and neither was read through — `escape.js` is outside `dir` and is
-    // nowhere here, so no pin of a file in this directory can hash bytes that live elsewhere.
-    assert.deepStrictEqual(listing.other, ["link.js", "outside"]);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+  const listing = await _listing(dir);
+  // `notes/` is unexpected and empty, so it reaches no listing at all: the ledger's silence on
+  // an empty directory is the decision above, not a hole in the walk.
+  assert.deepStrictEqual(listing.files, ["LICENSE", "dist/index.js"]);
+  // Both links are named and neither was read through — `escape.js` is outside `dir` and is
+  // nowhere here, so no pin of a file in this directory can hash bytes that live elsewhere.
+  assert.deepStrictEqual(listing.other, ["link.js", "outside"]);
 });

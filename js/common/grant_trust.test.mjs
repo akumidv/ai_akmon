@@ -32,6 +32,7 @@ import {
   trustReport,
   unifiedDiff,
 } from "./grant_trust.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 const ABC_DIGEST = "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd18cb"; // sha256 of "abc\n"
 
@@ -39,7 +40,7 @@ const ABC_DIGEST = "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd
 const at = (second) => new Date(Date.UTC(2026, 0, 2, 3, 4, second));
 
 function scratch() {
-  return fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-grant-trust-")));
+  return tempDir("akmon-grant-trust-");
 }
 
 /** A project root named `name` under `base`, and a store under `base`. */

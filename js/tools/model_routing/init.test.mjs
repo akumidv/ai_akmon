@@ -7,9 +7,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
+import { tempDir } from "../../common/temp_dir.test.mjs";
 import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { read } from "../../common/jsondata.mjs";
 import { loadRegistry, registryHash } from "./routing.mjs";
@@ -50,7 +50,7 @@ function run(argv) {
  * @returns {string}
  */
 function project(files = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "init-test-"));
+  const root = tempDir("init-test-");
   fs.writeFileSync(path.join(root, "AGENTS.md"), "x");
   for (const [rel, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -382,7 +382,7 @@ test("an overlay that is not a JSON object is one error line and exit 2, with no
 test("the init summary names what the second opinion would run first, resolved through the walk", () => {
   const root = project();
   const saved = process.env.PATH;
-  const empty = fs.mkdtempSync(path.join(os.tmpdir(), "init-path-"));
+  const empty = tempDir("init-path-");
   process.env.PATH = empty;
   try {
     assert.match(

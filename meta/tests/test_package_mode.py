@@ -157,10 +157,34 @@ def test_materialization_ships_only_the_guardrails_agents_md_imports(tmp_path):
         "_aitna/.akmon/rules/code.md",
         "_aitna/.akmon/rules/collaboration.md",
         "_aitna/.akmon/rules/templates.md",
+        "_aitna/.akmon/rules/unattended.md",
     }
     guardrail = next(f for f in files if f.path.name == "_common.md")
     assert sync.generated_marker() in guardrail.content
     assert guardrail.content.startswith("#")  # heading preserved as the first line
+
+
+def test_the_hook_delivered_rule_files_are_materialized_though_no_file_imports_them(tmp_path):
+    """A49: the head layer and the unattended layer reach a session through hooks, so ``AGENTS.md`` imports
+    neither — yet package mode still writes both, because the fallback section and ``QWEN.md`` point at them."""
+    root = _make_package_root(tmp_path, agents_md="# AGENTS\n")
+    names, _ = sync.imported_standard_files(root)
+    files, errors = sync._materialized_files(root)
+    assert errors == []
+    paths = {f.path.relative_to(root).as_posix() for f in files}
+    for name in sync.hook_delivered():
+        assert name not in names
+        assert f"_aitna/.akmon/{name}" in paths
+    collaboration = next(f for f in files if f.path.name == "collaboration.md")
+    assert sync.generated_marker() in collaboration.content
+
+
+def test_a_hook_delivered_file_the_standard_does_not_ship_is_a_plan_error(tmp_path):
+    root = _make_package_root(tmp_path)
+    data = {**sync.read_sync_data(), "hook_delivered": ["rules/nothing.md"]}
+    files, errors = sync._materialized_files(root, data)
+    assert errors == ["the standard does not ship a hook-delivered file: rules/nothing.md"]
+    assert not any(f.path.name == "nothing.md" for f in files)
 
 
 def test_no_executable_surface_is_materialized(tmp_path):
@@ -190,7 +214,7 @@ Add a language guardrail, for example `@_aitna/.akmon/guardrails/python.md`.
 """
     root = _make_package_root(tmp_path, agents_md=agents_md)
     names, errors = sync.imported_standard_files(root)
-    assert names == ["guardrails/_common.md", "rules/code.md", "rules/collaboration.md", "rules/templates.md"]
+    assert names == ["guardrails/_common.md", "rules/code.md"]
     assert errors == []
 
 
@@ -200,7 +224,7 @@ def test_the_always_imported_files_are_materialized_even_when_agents_md_imports_
     the rule files beside it travel with it."""
     root = _make_package_root(tmp_path, agents_md="# AGENTS\n")
     names, errors = sync.imported_standard_files(root)
-    assert names == ["guardrails/_common.md", "rules/code.md", "rules/collaboration.md", "rules/templates.md"]
+    assert names == ["guardrails/_common.md", "rules/code.md"]
     assert errors == []
 
 

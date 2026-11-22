@@ -26,7 +26,7 @@ The blank lines and the option list are kept: a Markdown view joins adjacent lin
 An action:
 
 ```
-2. **D-C139-WRITE** — record the accepted order in the ADR.
+2. **G-C139-WRITE** — record the accepted order in the ADR.
 ```
 
 ## Needed from you
@@ -45,5 +45,5 @@ An action:
 Answer "all as recommended" for the decisions and name the exceptions by code; each action needs its own code.
 ```
 
-An answer `all as recommended, except D-C139-ORDER: a; D-C139-WRITE: yes` accepts every recommended
+An answer `all as recommended, except D-C139-ORDER: a; G-C139-WRITE: yes` accepts every recommended
 decision but the order, takes (a) there, and permits the one action by its code.

@@ -7,10 +7,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import { exceptionClassName, pyError, pyRepr, pyStr, readText, universalNewlines } from "./pyvalue.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 /** What `body` throws. */
 function thrown(/** @type {() => unknown} */ body) {
@@ -46,15 +46,11 @@ test("universalNewlines turns CRLF and a lone CR into LF and leaves LF alone", (
 });
 
 test("readText decodes strictly, keeps a BOM and translates newlines", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pyvalue-test-"));
-  try {
-    fs.writeFileSync(path.join(dir, "ok"), Buffer.from("\ufeffa\r\nb\r", "utf8"));
-    assert.equal(readText(path.join(dir, "ok")), "\ufeffa\nb\n");
-    fs.writeFileSync(path.join(dir, "bad"), Buffer.from([0x61, 0xff]));
-    assert.equal(/** @type {Error} */ (thrown(() => readText(path.join(dir, "bad")))).name, "UnicodeDecodeError");
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("pyvalue-test-");
+  fs.writeFileSync(path.join(dir, "ok"), Buffer.from("\ufeffa\r\nb\r", "utf8"));
+  assert.equal(readText(path.join(dir, "ok")), "\ufeffa\nb\n");
+  fs.writeFileSync(path.join(dir, "bad"), Buffer.from([0x61, 0xff]));
+  assert.equal(/** @type {Error} */ (thrown(() => readText(path.join(dir, "bad")))).name, "UnicodeDecodeError");
 });
 
 test("pyRepr spells nested lists and dicts as Python's repr does", () => {

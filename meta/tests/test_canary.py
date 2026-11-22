@@ -301,7 +301,7 @@ def test_marker_tails_say_whole_or_subset_and_name_where_the_detail_lives():
     assert "not machine-checked" in commits
     assert "not decidable by a hook" in _tail("analysis.before-mutation")
     assert "subset" in _tail("delegation.tier-floor")
-    assert "not observable" in _tail("role.declaration")
+    assert "subset" in _tail("role.declaration") and "not observable" in _tail("role.declaration")
     for policy_id in (
         "privilege.no-escalation",
         "commits.owner-owned",

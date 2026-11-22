@@ -64,7 +64,10 @@ import {
 import {
   pyError,
   pyTypeName,
+  dictGet,
   dictItem,
+  dictSet,
+  isDict,
   pyContains,
   pyFloat,
   pyIntBig,
@@ -94,6 +97,7 @@ import {
   protectedBranches,
 } from "../common/access_matrix.mjs";
 import { fileFormat, writeReason as settingsWriteReason } from "../common/harness_settings.mjs";
+import { layerText } from "../common/audience.mjs";
 import { resolve as resolveWorkStyle } from "../common/work_style.mjs";
 import { TREE_ROOT } from "./hook_data.mjs";
 
@@ -112,6 +116,7 @@ export { aitnaRootName, findProjectRoot, locateProjectRoot };
  * @property {string | null} [systemMessage]
  * @property {string | null} [decision]
  * @property {string | null} [reason]
+ * @property {Record<string, unknown> | null} [updatedInput]
  */
 
 // --------------------------------------------------------------------------------------
@@ -186,6 +191,7 @@ export class HookResult {
     systemMessage = null,
     decision = null,
     reason = null,
+    updatedInput = null,
   }) {
     this.eventName = eventName;
     this.additionalContext = additionalContext;
@@ -196,6 +202,9 @@ export class HookResult {
      * model is asked to do before it may end the turn again. */
     this.decision = decision;
     this.reason = reason;
+    /** A PreToolUse rewrite of the tool call's input (Codex `updatedInput`, M257): the WHOLE input the
+     * tool will run with, since it replaces the received one rather than merging into it. */
+    this.updatedInput = updatedInput;
     Object.freeze(this);
   }
 }
@@ -2887,21 +2896,24 @@ function _workStyleLine(data, root, sessionId, start) {
  *
  * The one owner of that text: {@link sessionStartResult} and the always-loaded counter (ADR 0012 F18)
  * both build it here. `stale` is the stale-guardrail line to append, or `null`; the hook passes
- * {@link staleGuardrailNotice} and the counter {@link staleGuardrailCeiling}. Twin of
+ * {@link staleGuardrailNotice} and the counter {@link staleGuardrailCeiling}. `layer` is the
+ * audience's layer ({@link sessionLayer}), appended last and on every `source` because compaction drops
+ * what was given only at startup (M246); it does not depend on the roster. Twin of
  * `session_start_context`.
  * @param {HookData} data
  * @param {string} root
  * @param {string | null} sessionId
  * @param {string | null} stale
+ * @param {string | null} [layer]
  * @returns {string | null}
  */
-export function sessionStartContext(data, root, sessionId, stale) {
+export function sessionStartContext(data, root, sessionId, stale, layer = null) {
   const dev = agentNames(pyPath(root, aitnaRootName(root), "agents"), agentDefinitions(data));
   const desk = agentNames(pyPath(root, "agents"));
   if (dev.length === 0 && desk.length === 0) {
     // A project with no agent charters still has to hear this one: it is about the rules
     // the harness just loaded, not about the roles it did not declare.
-    return stale;
+    return _joinedContext([stale, layer]);
   }
 
   // The line fragments are owned by hooks/hook_core.json (C102); the assembly — which lines
@@ -2940,7 +2952,51 @@ export function sessionStartContext(data, root, sessionId, stale) {
   if (stale !== null) {
     lines.push(stale);
   }
+  if (layer !== null) {
+    lines.push(layer);
+  }
   return lines.join("\n");
+}
+
+/**
+ * The non-null `parts` joined by newlines, or null when there is none.
+ * @param {Array<string | null>} parts
+ * @returns {string | null}
+ */
+function _joinedContext(parts) {
+  const present = /** @type {string[]} */ (parts.filter((part) => part !== null));
+  return present.length > 0 ? present.join("\n") : null;
+}
+
+/**
+ * The layer the SessionStart hook appends for a session: the head layer when `attended`, else the
+ * unattended one. Read from the tree this hook executes from ({@link akmonRuntimeRoot}), so it needs no
+ * materialized copy and does not depend on an agent roster. A hook entry point derives `attended` from
+ * its environment (`common/audience.mjs` `isAttended`) and passes it down (A49, D-A49-SELECTOR). Twin
+ * of `session_layer`.
+ * @param {HookData} data
+ * @param {string} root
+ * @param {boolean} attended
+ * @returns {string}
+ */
+export function sessionLayer(data, root, attended) {
+  return layerText(data.audience, akmonRuntimeRoot(root), attended);
+}
+
+/**
+ * SubagentStart: the unattended layer, for the delegate that is starting (A49). A delegate is read
+ * only by the head that launched it, so it gets the rules for working without an owner
+ * (`rules/unattended.md`), not the owner-dialogue rules (M247, M250). Twin of `subagent_start_result`.
+ *
+ * Runtime classification: operational
+ * Rationale: it authors no rule; it delivers `rules/unattended.md` to the one reader the entry file
+ * cannot reach selectively.
+ * @param {HookData} data
+ * @param {string} root
+ * @returns {HookResult}
+ */
+export function subagentStartResult(data, root) {
+  return new HookResult({ eventName: "SubagentStart", additionalContext: sessionLayer(data, root, false) });
 }
 
 /**
@@ -2954,14 +3010,17 @@ export function sessionStartContext(data, root, sessionId, stale) {
  * second fact "operational" would read as "incidental", which it is not.
  * One line states the work style in force for `sessionId` and the level that set it (ADR 0031/D03);
  * when the work-style data cannot be read or has the wrong shape, that line alone is left out.
+ * `layer` is the audience's layer ({@link sessionLayer}), which the entry point passes on every `source`;
+ * without a roster it is all the hook has to say.
  * @param {HookData} data
  * @param {string} root
  * @param {string | null} [sessionId]
+ * @param {string | null} [layer]
  * @returns {HookResult | null}
  */
-export function sessionStartResult(data, root, sessionId = null) {
+export function sessionStartResult(data, root, sessionId = null, layer = null) {
   const stale = staleGuardrailNotice(data, root);
-  const context = sessionStartContext(data, root, sessionId, stale);
+  const context = sessionStartContext(data, root, sessionId, stale, layer);
   if (context === null) {
     return null;
   }
@@ -3157,6 +3216,12 @@ export function roleOnCodeMessage(data, root = null) {
  * PreToolUse guardrail: on the first code edit per session, remind to declare the engineer role.
  *
  * Policy ID: role.declaration
+ *
+ * The role line is the head session's rule (`rules/collaboration.md` § Role declaration): a delegate
+ * declares no role and reports to the head (`rules/unattended.md`). The entry points therefore never call
+ * this for a subagent's tool call (the payload carries `agent_id`, C28d) — Claude Code shares the
+ * `session_id` between the head and its subagents, so a delegate's first edit would otherwise also spend
+ * the head's once-per-session marker.
  * @param {HookData} data
  * @param {string} toolName
  * @param {unknown} filePath
@@ -3210,6 +3275,10 @@ export function analysisBeforeMutationMessage(data) {
  * PreToolUse guardrail: on the first planning-doc edit per session, remind analysis-before-mutation.
  *
  * Policy ID: analysis.before-mutation
+ *
+ * The reminder tells the writer to stop and ask the owner (`rules/collaboration.md` § Analysis before
+ * mutation — with the owner). A delegate's brief is its go-ahead (`rules/unattended.md`), so the entry
+ * points never call this for a subagent's tool call (the payload carries `agent_id`, C28d).
  * @param {HookData} data
  * @param {string} toolName
  * @param {unknown} filePath
@@ -3230,6 +3299,41 @@ export function analysisWriteResult(data, toolName, filePath, sessionId, project
   }
 
   return new HookResult({ eventName: "PreToolUse", additionalContext: analysisBeforeMutationMessage(data) });
+}
+
+/**
+ * PreToolUse guard on a Codex spawn: the child starts without the parent's history, or the call is left
+ * alone. Twin of `spawn_fork_result`.
+ *
+ * A child forked with `fork_turns="all"` — the default when the key is absent (M256) — inherits the
+ * parent's history, and with it the head-only owner-dialogue layer the SessionStart hook gave the head
+ * (M250, M257); the child already gets the unattended layer from SubagentStart. So a spawn whose
+ * `fork_turns` is missing or anything but `none` is rewritten to `none` through `updatedInput`, which
+ * must carry every received field — the opaque `message` included — and needs
+ * `permissionDecision: "allow"` (M257). A spawn that already says `none`, and any input that is not an
+ * object, is left untouched: no output.
+ *
+ * Runtime classification: operational
+ * Rationale: it authors no rule; it keeps a delegate from inheriting the head layer that
+ * `rules/unattended.md` says does not apply to it.
+ * @param {HookData} data
+ * @param {unknown} toolInput
+ * @returns {HookResult | null}
+ */
+export function spawnForkResult(data, toolInput) {
+  const guard = _core(data, "spawn_guard");
+  const key = dictItem(guard, "fork_key");
+  const isolated = dictItem(guard, "isolated");
+  if (!isDict(toolInput) || dictGet(toolInput, key) === isolated) {
+    return null;
+  }
+  /** @type {Record<string, unknown>} */
+  const updated = {};
+  for (const [name, value] of Object.entries(/** @type {Record<string, unknown>} */ (toolInput))) {
+    dictSet(updated, name, value);
+  }
+  dictSet(updated, key, isolated);
+  return new HookResult({ eventName: "PreToolUse", permissionDecision: "allow", updatedInput: updated });
 }
 
 // --------------------------------------------------------------------------------------

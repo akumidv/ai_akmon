@@ -7,7 +7,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -15,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { readData, resolve, WorkStyle } from "../common/work_style.mjs";
 import { sessionStartResult } from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 
 const CLAUDE_HOOK = fileURLToPath(new URL("./work-style.mjs", import.meta.url));
 const CODEX_HOOK = fileURLToPath(new URL("./codex-hook.mjs", import.meta.url));
@@ -22,7 +22,7 @@ const DATA = readData();
 
 /** A scratch project with the default dev root. */
 function project(record = 'mount = "package"\n') {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-work-hook-")));
+  const root = tempDir("akmon-work-hook-");
   fs.mkdirSync(path.join(root, "_aitna"));
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# a\n");
   fs.writeFileSync(path.join(root, "_aitna", ".akmon.toml"), record);
@@ -91,7 +91,7 @@ for (const fields of [
 }
 
 test("the Claude hook with no project root is silent and writes no file", () => {
-  const bare = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-work-bare-")));
+  const bare = tempDir("akmon-work-bare-");
   const done = run(CLAUDE_HOOK, [], bare, { session_id: "s1", prompt: "/style controlling", cwd: bare });
   assert.equal(done.stdout, "");
   assert.deepEqual(fs.readdirSync(bare), []);

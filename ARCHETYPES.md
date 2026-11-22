@@ -25,6 +25,7 @@ the per-archetype **must-document** list is the next section.
 | `frontend` | UI application | a web app | no — it *is* the UI | — |
 | `job` | scheduled / ETL job | a data-prep job | no — an orchestrator runs it | — |
 | `platform` | agent host / platform | an agent runner | no — it *consumes* others' USAGE (mounts `skills/`) | — |
+| `agent-tooling` | what AI coding agents run with — rules, hooks, skills, agent definitions — for several harnesses | akmon | yes — the skills and tools it ships | the CLI is the tool |
 | `custom` | none of the above | — | declared per project | declared |
 
 IDs are immutable contract values (tooling/templates depend on them).
@@ -47,6 +48,7 @@ universal set*. Where an archetype exports a USAGE skill, its **shape** follows 
 | `mcp` | the MCP tool contract (names / IO / errors); how a consumer mounts it; unit + tool-contract tests |
 | `frontend` | UI/state conventions; build/test/lint in pre-commit; client-side secrets boundary |
 | `job` | the orchestration target; inputs/outputs, idempotency, retry/replay; data + secrets boundary |
+| `agent-tooling` | the harness-neutral statement of each behaviour, the adapter per supported harness with its measured carriers, and the capability matrix ([`agent-harness`](profiles/agent-harness.md)) |
 | `platform` | the runtime agent layer kept **separate** from `_aitna/`; which consumed USAGE contracts it relies on; agent isolation/safety. *(A runtime platform that hosts OPERATE agents is out of akmon scope.)* |
 | `custom` | scope, toolchain, runtime, risk profile, USAGE placement, mandatory checks |
 
@@ -119,6 +121,7 @@ plausible — auth, encryption, sealed data, decryption hosting — so it recurs
 | `service` / `mcp` | `crypto` |
 | `job` | `crypto` |
 | `platform` | `crypto` |
+| `agent-tooling` | [`agent-harness`](profiles/agent-harness.md); `crypto` |
 | `frontend` | a design-tokens profile (when added) |
 | `custom` | decide per project |
 

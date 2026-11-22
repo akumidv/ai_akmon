@@ -10,7 +10,6 @@ import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,6 +18,7 @@ import { apply, codexHooksText, plannedFiles, readSyncData } from "./sync.mjs";
 import * as alwaysLoaded from "../common/always_loaded.mjs";
 import * as codexHooks from "../common/codex_hooks.mjs";
 import { read } from "../common/jsondata.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 import { CATALOG_FORMATS, defaultModelToken } from "../tools/model_routing/routing.mjs";
 
 const TREE = fs.realpathSync(posix.resolve(posix.dirname(fileURLToPath(import.meta.url)), "..", ".."));
@@ -37,16 +37,11 @@ const AGENTS =
 const CI = "steps:\n  - run: npx akmon sync --check\n  - run: npx akmon verify --strict\n";
 
 /**
- * A scratch directory removed after `body`.
+ * Run `body` over a scratch directory (removed when the process exits).
  * @param {(scratch: string) => void | Promise<void>} body
  */
 async function withScratch(body) {
-  const scratch = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-verify-test-")));
-  try {
-    await body(scratch);
-  } finally {
-    fs.rmSync(scratch, { recursive: true, force: true });
-  }
+  await body(tempDir("akmon-verify-test-"));
 }
 
 /** Write `text` at `relative` under `base`, making the directories. */
@@ -613,6 +608,7 @@ test("node_wired_hook_scripts: the entry points and every module they import, an
     "codex-hook",
     "git-commit-guard",
     "session-start-agent",
+    "subagent-start",
     "role-on-code",
     "analysis-guard",
     "model-routing",
@@ -2325,12 +2321,18 @@ test("profile imports: the vendored prefix in a package attach warns with the li
 test("profile imports: a profile the standard does not ship warns, naming what it ships", async () => {
   await withScratch((scratch) => {
     const verifier = profileFindings(scratch, "@_aitna/.akmon/profiles/rust.md\n");
+    // read from the tree, so a profile the standard gains does not stale this pin
+    const shipped = fs
+      .readdirSync(posix.join(TREE, "profiles"))
+      .filter((name) => name.endsWith(".md"))
+      .sort()
+      .join(", ");
     assert.deepEqual(of(verifier, "agents.profile-import"), [
       [
         "warn",
         "AGENTS.md",
         "AGENTS.md imports @_aitna/.akmon/profiles/rust.md, a profile the standard does not ship, so it loads nothing",
-        "Remove the line @_aitna/.akmon/profiles/rust.md from AGENTS.md, or import a profile the standard ships (js.md, python-stdlib.md, python.md, quant.md).",
+        `Remove the line @_aitna/.akmon/profiles/rust.md from AGENTS.md, or import a profile the standard ships (${shipped}).`,
       ],
     ]);
   });

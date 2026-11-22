@@ -1,0 +1,20 @@
+# A spawn that already says `fork_turns = "none"` passes untouched: no output (A49).
+id = "hooks/codex-hook-spawn-guard-none-passes"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook"]
+
+[run]
+script = "codex-hook"
+args = ["spawn-guard"]
+
+[run.payload]
+tool_name = "collaborationspawn_agent"
+session_id = "sess-sg-none"
+cwd = "{{root}}"
+tool_input = { task_name = "explore", fork_turns = "none", message = "find it" }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

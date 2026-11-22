@@ -113,7 +113,12 @@ def test_the_dev_layer_imports_exactly_what_the_archetype_map_prescribes():
     imports = set(re.findall(r"^@(\S+)$", _AGENTS.read_text(encoding="utf-8"), re.MULTILINE))
     expected = _expected_dev_imports() | set(sync.always_imported())
     assert {"guardrails/_common.md", "profiles/python.md", "profiles/js.md"} <= expected
-    assert imports == expected
+    # A domain profile is opt-in: akmon may import only those its declared archetype suggests.
+    declared = re.search(r"\*\*Archetype:\*\* `([\w-]+)`", _AGENTS.read_text(encoding="utf-8"))
+    assert declared, "AGENTS.md declares no archetype"
+    suggested = _archetype_rows("Archetype").get(f"`{declared.group(1)}`", set())
+    assert expected <= imports
+    assert imports - expected <= suggested, f"opt-in imports the archetype does not suggest: {imports - expected - suggested}"
 
 
 def test_the_dev_layer_imports_its_rules_instead_of_restating_them():

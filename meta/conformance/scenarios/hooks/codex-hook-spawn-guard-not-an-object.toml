@@ -1,0 +1,20 @@
+# A spawn whose tool_input is not an object is left alone: no output, no failure (A49).
+id = "hooks/codex-hook-spawn-guard-not-an-object"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook"]
+
+[run]
+script = "codex-hook"
+args = ["spawn-guard"]
+
+[run.payload]
+tool_name = "collaborationspawn_agent"
+session_id = "sess-sg-text"
+cwd = "{{root}}"
+tool_input = "not an object"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

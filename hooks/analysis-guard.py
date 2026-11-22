@@ -16,6 +16,11 @@ from common.markers import unidentified_identity  # hook_core puts the tree root
 
 def _decide() -> HookResult | None:
     payload = load_payload()
+    if payload.get("agent_id"):
+        # A delegate (``agent_id`` is present only inside a subagent, C28d) takes the head layer's rules
+        # for neither role nor go-ahead — its brief and ``rules/unattended.md`` stand in for them — and
+        # it shares the head's ``session_id``, so it must not spend the head's once-per-session marker.
+        return None
     tool_input = payload.get("tool_input") or {}
     return analysis_write_result(
         tool_name=normalize_tool(str(payload.get("tool_name") or "")),

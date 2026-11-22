@@ -15,6 +15,16 @@
             "statusMessage": "Checking analysis-before-mutation"
           }
         ]
+      },
+      {
+        "matcher": "collaborationspawn_agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/hooks/codex-hook.py\" spawn-guard",
+            "statusMessage": "Keeping a spawned child out of the head's history"
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -30,6 +40,17 @@
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/hooks/codex-hook.py\" learning-reminder",
             "statusMessage": "Checking the learning-run reminder"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/hooks/codex-hook.py\" subagent-start",
+            "statusMessage": "Loading akmon delegate rules"
           }
         ]
       }

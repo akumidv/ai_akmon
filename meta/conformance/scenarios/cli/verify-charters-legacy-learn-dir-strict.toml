@@ -27,7 +27,7 @@ findings = [
   "OK agents.profile-import AGENTS.md: every profile import in AGENTS.md resolves → Keep each profile import under @_aitna/.akmon/profiles/.",
   "OK pointers.vendor-agents-link: vendor pointers point at AGENTS.md → Keep every vendor pointer aimed at AGENTS.md.",
   "OK agents.skill-roots AGENTS.md: AGENTS.md references source skill roots → Keep the source skill roots named in AGENTS.md.",
-  "OK caps.always-loaded AGENTS.md: consumer-total: lines=230/724 bytes=13604/44500 hooks=2554 → Keep AGENTS.md and the guardrails it imports within the always-loaded cap",
+  "OK caps.always-loaded AGENTS.md: consumer-total: lines=122/724 bytes=8309/44500 hooks=2811 unattended-head=8276 delegate=5700 → Keep AGENTS.md and the guardrails it imports within the always-loaded cap",
   "OK charters.role-link _aitna/agents/development/README.md: _aitna/agents/development/README.md links a akmon role → Keep the akmon role link in this charter.",
   "WARN charters.legacy-role-dir _aitna/agents/learn: _aitna/agents/learn is named for a role, not an agent → Move its content into _aitna/agents/learning/README.md; a charter is one directory per agent (ADR 0027/D04).",
   "OK charters.role-link _aitna/agents/learn/README.md: _aitna/agents/learn/README.md links a akmon role → Keep the akmon role link in this charter.",

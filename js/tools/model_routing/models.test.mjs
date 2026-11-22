@@ -8,9 +8,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
+import { tempDir } from "../../common/temp_dir.test.mjs";
 import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { read } from "../../common/jsondata.mjs";
 import { main } from "./models.mjs";
@@ -55,7 +55,7 @@ const FILE = "_aitna/.local/model-aliases.json";
  * @returns {{base: string, root: string}}
  */
 function scratch(registry = REGISTRY) {
-  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "models-test-")));
+  const base = tempDir("models-test-");
   const root = path.join(base, "proj");
   const routing = path.join(root, "_aitna", "akmon", "tools", "model_routing");
   fs.mkdirSync(routing, { recursive: true });

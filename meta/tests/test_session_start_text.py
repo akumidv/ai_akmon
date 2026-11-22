@@ -53,11 +53,12 @@ def test_the_text_a_hook_injects_is_the_text_counted(tmp_path):
     # session-start-agent: one function builds the context; only the stale line differs (worst case counted).
     ceiling = hook_core.stale_guardrail_ceiling(root)
     assert ceiling is not None
-    assert _text(members, "session-start-agent") == hook_core.session_start_context(root, None, ceiling)
-    live = hook_core.session_start_result(root)
+    layer = hook_core.session_layer(root, attended=True)
+    assert _text(members, "session-start-agent") == hook_core.session_start_context(root, None, ceiling, layer)
+    live = hook_core.session_start_result(root, None, layer)
     assert live is not None
     assert live.additional_context == hook_core.session_start_context(
-        root, None, hook_core.stale_guardrail_notice(root)
+        root, None, hook_core.stale_guardrail_notice(root), layer
     )
     # learning-reminder: the counted text is one of the two texts reminder_texts gives for the thresholds.
     data = learning.read_data()
@@ -137,3 +138,18 @@ def test_the_tool_command_ceiling_is_the_longest_launcher_spelling():
     assert routing.tool_command_ceiling("_aitna/akmon", "model_routing/init") == mount
     assert len(mount) >= len(routing.tool_command("$(akmon path)", "model_routing/init"))
     assert routing.tool_command_ceiling("a", "t") == "python3 a/tools/t.py"
+
+
+def test_each_audience_counts_its_own_layer_and_a_delegate_only_the_subagent_start_text(tmp_path):
+    root = _project(tmp_path)
+    attended = session_start_text.session_start_members(root)
+    unattended = session_start_text.session_start_members(root, attended=False)
+    delegate = session_start_text.subagent_start_members(root)
+    head_layer = hook_core.session_layer(root, attended=True)
+    other_layer = hook_core.session_layer(root, attended=False)
+    assert _text(attended, "session-start-agent").endswith(head_layer)
+    assert _text(unattended, "session-start-agent").endswith(other_layer)
+    assert head_layer not in _text(unattended, "session-start-agent")
+    assert [member.name for member in delegate] == ["hook: subagent-start"]
+    assert delegate[0].text == other_layer  # the delegate and the unattended head read the same layer
+    assert hook_core.subagent_start_result(root).additional_context == other_layer

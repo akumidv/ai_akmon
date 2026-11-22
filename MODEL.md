@@ -65,7 +65,7 @@ recording and acceptance procedure.
 |---|---|---|
 | **Layer** | *where* an artifact lives + *whom it serves* | SHARED / LOCAL / USAGE |
 | **Role** | *who performs* the work + by which pipeline | review / architect / engineer / learn / release |
-| **Archetype** | *what* the project exposes outward | package / service / mcp / frontend / job / platform / custom |
+| **Archetype** | *what* the project exposes outward | package / service / mcp / frontend / job / platform / agent-tooling / custom |
 | **Actor** | *who drives* a run, fixed for the run ([0025](docs/adr/0025-actors-and-action-repertoire.md)) | developer / autonomous / guided |
 
 Each is a type dimension (a kind, not a thing). An **agent is not an axis value** — it is the unit of responsibility that works in a role (a mode) on

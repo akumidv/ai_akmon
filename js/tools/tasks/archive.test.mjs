@@ -7,9 +7,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
+import { tempDir } from "../../common/temp_dir.test.mjs";
 import { insertIntoArchive, main, malformedEntries, markDone, parseEntries, splitDone } from "./archive.mjs";
 
 const DATA = {
@@ -62,7 +62,7 @@ function run(argv) {
  * @returns {string} the TASKS.md path
  */
 function backlog(tasks, archive = "# Archive\n\n## Done\n\n- T1 · old · done · e\n") {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "archive-test-"));
+  const dir = tempDir("archive-test-");
   fs.writeFileSync(path.join(dir, "TASKS.md"), tasks);
   if (archive !== null) {
     fs.writeFileSync(path.join(dir, "TASKS_ARCHIVE.md"), archive);

@@ -7,9 +7,9 @@
 // (`docker.test.mjs`) skips itself when `docker version` fails.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import { delimiter, join } from "node:path";
 
+import { tempDir as sharedTempDir } from "../../common/temp_dir.test.mjs";
 import { makeEnvelope } from "./cases.mjs";
 
 /** The defective file of the fixture case, in its buggy and in its fixed form. */
@@ -129,11 +129,11 @@ export class StubChannel {
 }
 
 /**
- * A fresh temporary directory.
+ * A fresh temporary directory, removed when the test process exits.
  * @returns {string}
  */
 export function tempDir() {
-  return fs.mkdtempSync(join(os.tmpdir(), "model-profile-test-"));
+  return sharedTempDir("model-profile-test-");
 }
 
 /**
@@ -176,7 +176,8 @@ if (argv[0] === "version" || argv[0] === "rm") {
 const image = argv.indexOf("python:3.13-slim");
 const command = argv.slice(image + 1);
 const stdin = fs.readFileSync(0);
-const work = fs.mkdtempSync(path.join(os.tmpdir(), "fake-work-"));
+// Under the test's own folder when it names one, so a run killed before its clean-up leaves nothing behind.
+const work = fs.mkdtempSync(path.join(process.env.AKMON_FAKE_DOCKER_WORK ?? os.tmpdir(), "fake-work-"));
 let done;
 if (command[0] === "sh") {
   const script = command[2].replaceAll("/work", work).replace("exec python ", "exec python3 ");
@@ -199,10 +200,16 @@ export function installFakeDocker() {
   const binary = join(directory, "docker");
   fs.writeFileSync(binary, FAKE_DOCKER, { mode: 0o755 });
   const saved = process.env.PATH;
+  const savedWork = process.env.AKMON_FAKE_DOCKER_WORK;
   process.env.PATH = `${directory}${delimiter}${saved}`;
+  process.env.AKMON_FAKE_DOCKER_WORK = directory;
   return () => {
     process.env.PATH = saved;
-    fs.rmSync(directory, { recursive: true, force: true });
+    if (savedWork === undefined) {
+      delete process.env.AKMON_FAKE_DOCKER_WORK;
+    } else {
+      process.env.AKMON_FAKE_DOCKER_WORK = savedWork;
+    }
   };
 }
 
@@ -220,7 +227,6 @@ export function withoutDocker(body) {
     return body();
   } finally {
     process.env.PATH = saved;
-    fs.rmSync(empty, { recursive: true, force: true });
   }
 }
 

@@ -6,20 +6,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { readData, readState } from "../common/learning.mjs";
 import { TREE_ROOT } from "./hook_data.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 
 const DATA = readData();
 const _HOOK = fileURLToPath(new URL("./codex-hook.mjs", import.meta.url));
 
 /** A scratch project whose record asks for a reminder at two sessions. */
 function project() {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-codex-learning-")));
+  const root = tempDir("akmon-codex-learning-");
   fs.mkdirSync(path.join(root, "_aitna"));
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# a\n");
   fs.writeFileSync(path.join(root, "_aitna", ".akmon.toml"), '[learning]\nreminder_sessions = "2"\n');
@@ -121,19 +121,15 @@ test("the git-commit-guard route reads the actor from the environment (ADR-0031/
  * @param {(root: string) => void} body
  */
 function withBrokenMatrixTree(body) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "akmon-broken-matrix-"));
-  try {
-    for (const directory of ["js", "hooks", "common", "tools/model_routing", "agents"]) {
-      fs.cpSync(path.join(TREE_ROOT, directory), path.join(root, directory), {
-        recursive: true,
-        filter: (source) => !source.includes("__pycache__") && !source.endsWith(".test.mjs"),
-      });
-    }
-    fs.writeFileSync(path.join(root, "common", "access_matrix.json"), "{ not json");
-    body(root);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+  const root = tempDir("akmon-broken-matrix-");
+  for (const directory of ["js", "hooks", "common", "tools/model_routing", "agents"]) {
+    fs.cpSync(path.join(TREE_ROOT, directory), path.join(root, directory), {
+      recursive: true,
+      filter: (source) => !source.includes("__pycache__") && !source.endsWith(".test.mjs"),
+    });
   }
+  fs.writeFileSync(path.join(root, "common", "access_matrix.json"), "{ not json");
+  body(root);
 }
 
 test("the git-commit-guard route denies an autonomous run when the access matrix cannot be read, not a developer's", () => {

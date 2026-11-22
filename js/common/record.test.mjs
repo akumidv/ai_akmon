@@ -9,7 +9,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 
 import { parse as parseToml } from "../vendor/smol-toml/dist/index.js";
@@ -22,6 +21,7 @@ import {
   stripInlineComment,
   RecordError,
 } from "./record.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 const _UNITS = new URL("../../meta/conformance/units/record.toml", import.meta.url);
 
@@ -54,26 +54,22 @@ function _recordFile(/** @type {string} */ dir, /** @type {string | null} */ con
 test("every case of the units table: lenient degrades, strict refuses per the table", () => {
   const units = _units();
   assert.ok(units.case.length > 0, "the units table carries cases");
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-units-"));
-  try {
-    units.case.forEach((unitCase, i) => {
-      const path = _recordFile(dir, unitCase.absent ? null : /** @type {string} */ (unitCase.text));
-      const expected =
-        /** @type {{lenient?: Record<string, unknown>, strict?: Record<string, unknown>, strict_ok?: boolean}} */ (
-          unitCase.expected
-        );
-      // An expected field left out is the null answer (TOML has no null): no lenient
-      // value means the empty table, no strict value means the strict reader raised.
-      assert.deepStrictEqual(readAkmonToml(path), expected.lenient ?? _emptyTable(), `case ${i}: lenient`);
-      if (expected.strict_ok) {
-        assert.deepStrictEqual(readAkmonTomlStrict(path), expected.strict ?? _emptyTable(), `case ${i}: strict`);
-      } else {
-        assert.throws(() => readAkmonTomlStrict(path), RecordError, `case ${i}: strict refuses`);
-      }
-    });
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-record-units-");
+  units.case.forEach((unitCase, i) => {
+    const path = _recordFile(dir, unitCase.absent ? null : /** @type {string} */ (unitCase.text));
+    const expected =
+      /** @type {{lenient?: Record<string, unknown>, strict?: Record<string, unknown>, strict_ok?: boolean}} */ (
+        unitCase.expected
+      );
+    // An expected field left out is the null answer (TOML has no null): no lenient
+    // value means the empty table, no strict value means the strict reader raised.
+    assert.deepStrictEqual(readAkmonToml(path), expected.lenient ?? _emptyTable(), `case ${i}: lenient`);
+    if (expected.strict_ok) {
+      assert.deepStrictEqual(readAkmonTomlStrict(path), expected.strict ?? _emptyTable(), `case ${i}: strict`);
+    } else {
+      assert.throws(() => readAkmonTomlStrict(path), RecordError, `case ${i}: strict refuses`);
+    }
+  });
 });
 
 test("every strip case of the units table pins the quote-aware comment rule", () => {
@@ -85,24 +81,20 @@ test("every strip case of the units table pins the quote-aware comment rule", ()
 });
 
 test("a leading BOM stays out of the first key (C101), strict and lenient included", () => {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-bom-"));
-  try {
-    const root = dir;
-    fs.mkdirSync(posix.join(root, "_aitna"));
-    const record = posix.join(root, "_aitna", ".akmon.toml");
-    // Well-formed save with a BOM: the record must still declare its mount.
-    fs.writeFileSync(record, '\uFEFFmount = "package"\n');
-    assert.equal(recordedMount(root), "package");
-    assert.equal(recordsPackageMode(root), true);
-    // The line parser itself — the path that used to fold the BOM into the key, forced
-    // here by a header that `parse` refuses.
-    fs.writeFileSync(record, '\uFEFFmount = "package"\n[broke =\n');
-    assert.equal(/** @type {Record<string, unknown>} */ (readAkmonToml(record))["mount"], "package");
-    // And strict must refuse the BOM the way tomllib does, not fold it in silently.
-    assert.throws(() => readAkmonTomlStrict(record), RecordError);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-record-bom-");
+  const root = dir;
+  fs.mkdirSync(posix.join(root, "_aitna"));
+  const record = posix.join(root, "_aitna", ".akmon.toml");
+  // Well-formed save with a BOM: the record must still declare its mount.
+  fs.writeFileSync(record, '\uFEFFmount = "package"\n');
+  assert.equal(recordedMount(root), "package");
+  assert.equal(recordsPackageMode(root), true);
+  // The line parser itself — the path that used to fold the BOM into the key, forced
+  // here by a header that `parse` refuses.
+  fs.writeFileSync(record, '\uFEFFmount = "package"\n[broke =\n');
+  assert.equal(/** @type {Record<string, unknown>} */ (readAkmonToml(record))["mount"], "package");
+  // And strict must refuse the BOM the way tomllib does, not fold it in silently.
+  assert.throws(() => readAkmonTomlStrict(record), RecordError);
 });
 
 test(
@@ -113,7 +105,7 @@ test(
   () => {
     // `is_file()` swallows ENOENT, ENOTDIR, EBADF and ELOOP only: a permission error must not read
     // as an absent record, which would silently answer the default ecosystem.
-    const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-locked-"));
+    const root = tempDir("akmon-record-locked-");
     const aitna = posix.join(root, "_aitna");
     fs.mkdirSync(aitna);
     fs.writeFileSync(posix.join(aitna, ".akmon.toml"), 'ecosystem = "node"\n');
@@ -124,7 +116,6 @@ test(
       assert.throws(() => readAkmonTomlStrict(posix.join(aitna, ".akmon.toml")), { code: "EACCES" });
     } finally {
       fs.chmodSync(aitna, 0o755);
-      fs.rmSync(root, { recursive: true, force: true });
     }
   },
 );
@@ -135,23 +126,19 @@ test("the line parser breaks lines where str.splitlines() does, as the Python fa
   // `common/record.py`'s fallback answers for the same bytes, measured with python3: every
   // `splitlines` boundary — `\f`, `\x85`, U+2028, `\x1e`, `\v`, `\x1c`, `\x1d`, U+2029,
   // `\r\n` — ends a line, where a `\r|\n` split folded the whole record into one `mount` value.
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-splitlines-"));
-  try {
-    const record = _recordFile(
-      dir,
-      'mount = "package"\fecosystem = "node"\x85akmon_version = "v1"\u2028[test]\x1erunner = "pytest"' +
-        '\vdepth = "2"\x1c\x1dkind = "x"\u2029tail = "y"\r\nlast = "z"\n',
-    );
-    assert.throws(() => readAkmonTomlStrict(record), RecordError);
-    assert.deepEqual(JSON.parse(JSON.stringify(readAkmonToml(record))), {
-      mount: "package",
-      ecosystem: "node",
-      akmon_version: "v1",
-      test: { runner: "pytest", depth: "2", kind: "x", tail: "y", last: "z" },
-    });
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-record-splitlines-");
+  const record = _recordFile(
+    dir,
+    'mount = "package"\fecosystem = "node"\x85akmon_version = "v1"\u2028[test]\x1erunner = "pytest"' +
+      '\vdepth = "2"\x1c\x1dkind = "x"\u2029tail = "y"\r\nlast = "z"\n',
+  );
+  assert.throws(() => readAkmonTomlStrict(record), RecordError);
+  assert.deepEqual(JSON.parse(JSON.stringify(readAkmonToml(record))), {
+    mount: "package",
+    ecosystem: "node",
+    akmon_version: "v1",
+    test: { runner: "pytest", depth: "2", kind: "x", tail: "y", last: "z" },
+  });
 });
 
 test("the line parser strips what str.strip() strips, as the Python fallback reads the value", () => {
@@ -159,118 +146,90 @@ test("the line parser strips what str.strip() strips, as the Python fallback rea
   // which Python keeps. `tomllib` refuses both texts (a bare value, a control character), so
   // both twins read them with their line parser; the expectations are what
   // `common/record.py`'s fallback answers for the same bytes, measured with python3.
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-strip-"));
-  try {
-    const separator = _recordFile(dir, "mount = package\x1f\n");
-    assert.throws(() => readAkmonTomlStrict(separator), RecordError);
-    assert.deepEqual(JSON.parse(JSON.stringify(readAkmonToml(separator))), { mount: "package" });
-    // A U+FEFF that does not lead the file is data: only the first one is a byte-order mark.
-    const bom = _recordFile(dir, "mount = package﻿\n");
-    assert.throws(() => readAkmonTomlStrict(bom), RecordError);
-    assert.deepEqual(JSON.parse(JSON.stringify(readAkmonToml(bom))), { mount: "package﻿" });
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-record-strip-");
+  const separator = _recordFile(dir, "mount = package\x1f\n");
+  assert.throws(() => readAkmonTomlStrict(separator), RecordError);
+  assert.deepEqual(JSON.parse(JSON.stringify(readAkmonToml(separator))), { mount: "package" });
+  // A U+FEFF that does not lead the file is data: only the first one is a byte-order mark.
+  const bom = _recordFile(dir, "mount = package﻿\n");
+  assert.throws(() => readAkmonTomlStrict(bom), RecordError);
+  assert.deepEqual(JSON.parse(JSON.stringify(readAkmonToml(bom))), { mount: "package﻿" });
 });
 
 test("an integer beyond 2**53 is the DV35 divergence: strict refuses, lenient reads the lines", () => {
   // `tomllib` reads the number exactly; JavaScript has none, so the record is a parse error here.
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-bigint-"));
-  try {
-    const path = _recordFile(dir, 'mount = "package"\nsize = 9007199254740993\n');
-    assert.throws(() => readAkmonTomlStrict(path), RecordError);
-    assert.deepStrictEqual(
-      readAkmonToml(path),
-      Object.assign(_emptyTable(), { mount: "package", size: "9007199254740993" }),
-    );
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-record-bigint-");
+  const path = _recordFile(dir, 'mount = "package"\nsize = 9007199254740993\n');
+  assert.throws(() => readAkmonTomlStrict(path), RecordError);
+  assert.deepStrictEqual(
+    readAkmonToml(path),
+    Object.assign(_emptyTable(), { mount: "package", size: "9007199254740993" }),
+  );
 });
 
 test("a zero-fraction float is the DV36 divergence: both readers give the number an integer gives", () => {
   // `tomllib` gives the float 1.0; JavaScript has one number type. No reader prints a record number.
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-float-"));
-  try {
-    const path = _recordFile(dir, 'mount = "package"\nratio = 1.0\n');
-    const expected = Object.assign(_emptyTable(), { mount: "package", ratio: 1 });
-    assert.deepStrictEqual(readAkmonTomlStrict(path), expected);
-    assert.deepStrictEqual(readAkmonToml(path), expected);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-record-float-");
+  const path = _recordFile(dir, 'mount = "package"\nratio = 1.0\n');
+  const expected = Object.assign(_emptyTable(), { mount: "package", ratio: 1 });
+  assert.deepStrictEqual(readAkmonTomlStrict(path), expected);
+  assert.deepStrictEqual(readAkmonToml(path), expected);
 });
 
 test("an absent record reads as nothing, and vetoes nothing", () => {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-absent-"));
-  try {
-    const record = posix.join(dir, "_aitna", ".akmon.toml");
-    assert.deepStrictEqual(readAkmonToml(record), _emptyTable());
-    assert.deepStrictEqual(readAkmonTomlStrict(record), _emptyTable());
-    assert.equal(recordedMount(dir), null);
-    assert.equal(recordsPackageMode(dir), false);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-record-absent-");
+  const record = posix.join(dir, "_aitna", ".akmon.toml");
+  assert.deepStrictEqual(readAkmonToml(record), _emptyTable());
+  assert.deepStrictEqual(readAkmonTomlStrict(record), _emptyTable());
+  assert.equal(recordedMount(dir), null);
+  assert.equal(recordsPackageMode(dir), false);
 });
 
 test("an empty mount declares nothing: null, not a default", () => {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-empty-"));
-  try {
-    fs.mkdirSync(posix.join(dir, "_aitna"));
-    fs.writeFileSync(posix.join(dir, "_aitna", ".akmon.toml"), 'mount = ""\n');
-    assert.equal(recordedMount(dir), null);
-    assert.equal(recordsPackageMode(dir), false);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-record-empty-");
+  fs.mkdirSync(posix.join(dir, "_aitna"));
+  fs.writeFileSync(posix.join(dir, "_aitna", ".akmon.toml"), 'mount = ""\n');
+  assert.equal(recordedMount(dir), null);
+  assert.equal(recordsPackageMode(dir), false);
 });
 
 test("a strict RecordError names the file and where the parse failed", () => {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-strict-"));
-  try {
-    const record = _recordFile(dir, 'mount = "a"\n[broke =\n');
-    assert.throws(
-      () => readAkmonTomlStrict(record),
-      (/** @type {unknown} */ err) => {
-        assert.ok(err instanceof RecordError);
-        assert.match(
-          /** @type {Error} */ (err).message,
-          /^\.akmon\.toml cannot be read as TOML: parse failed at line \d+, column \d+: /,
-        );
-        return true;
-      },
-    );
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-record-strict-");
+  const record = _recordFile(dir, 'mount = "a"\n[broke =\n');
+  assert.throws(
+    () => readAkmonTomlStrict(record),
+    (/** @type {unknown} */ err) => {
+      assert.ok(err instanceof RecordError);
+      assert.match(
+        /** @type {Error} */ (err).message,
+        /^\.akmon\.toml cannot be read as TOML: parse failed at line \d+, column \d+: /,
+      );
+      return true;
+    },
+  );
 });
 
 test("bytes that are not UTF-8 degrade leniently and are refused strictly", () => {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-utf8-"));
-  try {
-    // The bytes have to reach the disk as 0xff 0xfe: `latin1` maps each code unit to the byte of
-    // the same value, while a source-encoded U+FFFD is valid UTF-8 and would test the
-    // substitution instead of the refusal. `readFileSync(path, "utf8")` never throws on them —
-    // it replaces each invalid sequence — and the lenient line-parser fallback then read that
-    // substituted value back out as if the record said it.
-    const record = posix.join(dir, ".akmon.toml");
-    fs.writeFileSync(record, Buffer.from('[akmon]\nname = "\xff\xfe bad"\n', "latin1"));
-    assert.deepStrictEqual(readAkmonToml(record), _emptyTable());
-    assert.throws(
-      () => readAkmonTomlStrict(record),
-      (/** @type {unknown} */ err) => {
-        assert.ok(err instanceof RecordError);
-        assert.match(
-          /** @type {Error} */ (err).message,
-          /^\.akmon\.toml cannot be read as TOML: 'utf-8' codec can't decode the bytes: invalid UTF-8$/,
-        );
-        return true;
-      },
-    );
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-record-utf8-");
+  // The bytes have to reach the disk as 0xff 0xfe: `latin1` maps each code unit to the byte of
+  // the same value, while a source-encoded U+FFFD is valid UTF-8 and would test the
+  // substitution instead of the refusal. `readFileSync(path, "utf8")` never throws on them —
+  // it replaces each invalid sequence — and the lenient line-parser fallback then read that
+  // substituted value back out as if the record said it.
+  const record = posix.join(dir, ".akmon.toml");
+  fs.writeFileSync(record, Buffer.from('[akmon]\nname = "\xff\xfe bad"\n', "latin1"));
+  assert.deepStrictEqual(readAkmonToml(record), _emptyTable());
+  assert.throws(
+    () => readAkmonTomlStrict(record),
+    (/** @type {unknown} */ err) => {
+      assert.ok(err instanceof RecordError);
+      assert.match(
+        /** @type {Error} */ (err).message,
+        /^\.akmon\.toml cannot be read as TOML: 'utf-8' codec can't decode the bytes: invalid UTF-8$/,
+      );
+      return true;
+    },
+  );
 });
 
 /**
@@ -282,19 +241,15 @@ function withProject(
   /** @type {(root: string) => void} */ body,
   /** @type {{relative?: string, pointer?: string | null}} */ { relative = "_aitna", pointer = null } = {},
 ) {
-  const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-record-ecosystem-"));
-  try {
-    if (pointer !== null) {
-      fs.writeFileSync(posix.join(root, ".aitna-root"), `${pointer}\n`);
-    }
-    if (text !== null) {
-      fs.mkdirSync(posix.join(root, relative), { recursive: true });
-      fs.writeFileSync(posix.join(root, relative, ".akmon.toml"), text);
-    }
-    body(root);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+  const root = tempDir("akmon-record-ecosystem-");
+  if (pointer !== null) {
+    fs.writeFileSync(posix.join(root, ".aitna-root"), `${pointer}\n`);
   }
+  if (text !== null) {
+    fs.mkdirSync(posix.join(root, relative), { recursive: true });
+    fs.writeFileSync(posix.join(root, relative, ".akmon.toml"), text);
+  }
+  body(root);
 }
 
 test("recordedEcosystem: a Node attach is named by the record, anything else is python", () => {

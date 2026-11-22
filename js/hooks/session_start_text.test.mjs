@@ -7,7 +7,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 
 import { readData, readThresholds, reminderCeiling, reminderTexts, Due, Thresholds } from "../common/learning.mjs";
@@ -24,28 +23,27 @@ import {
 } from "../tools/model_routing/routing.mjs";
 import {
   akmonRuntimeRoot,
+  sessionLayer,
   sessionStartContext,
   sessionStartResult,
   staleGuardrailCeiling,
   staleGuardrailNotice,
+  subagentStartResult,
 } from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
-import { sessionStartMembers } from "./session_start_text.mjs";
+import { sessionStartMembers, subagentStartMembers } from "./session_start_text.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 
 const data = lazyHookData();
 
 /** A scratch project with one dev-layer agent charter and one materialized guardrail. */
 function withProject(/** @type {(root: string) => void} */ body) {
-  const root = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-session-start-text-")));
-  try {
-    fs.mkdirSync(posix.join(root, "_aitna", "agents", "development"), { recursive: true });
-    fs.writeFileSync(posix.join(root, "_aitna", "agents", "development", "README.md"), "# development\n");
-    fs.mkdirSync(posix.join(root, "_aitna", ".akmon", "guardrails"), { recursive: true });
-    fs.writeFileSync(posix.join(root, "_aitna", ".akmon", "guardrails", "_common.md"), "old text\n");
-    body(root);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  const root = tempDir("akmon-session-start-text-");
+  fs.mkdirSync(posix.join(root, "_aitna", "agents", "development"), { recursive: true });
+  fs.writeFileSync(posix.join(root, "_aitna", "agents", "development", "README.md"), "# development\n");
+  fs.mkdirSync(posix.join(root, "_aitna", ".akmon", "guardrails"), { recursive: true });
+  fs.writeFileSync(posix.join(root, "_aitna", ".akmon", "guardrails", "_common.md"), "old text\n");
+  body(root);
 }
 
 /** @param {string} root */
@@ -76,6 +74,33 @@ test("the three session-start hooks are members", () => {
   });
 });
 
+test("the session-start member carries the layer of its audience, the head's by default (A49)", () => {
+  withProject((root) => {
+    const text = (/** @type {import("../common/always_loaded.mjs").Member[]} */ members) =>
+      members.find((member) => member.name === "hook: session-start-agent")?.text ?? "";
+    const attended = text(sessionStartMembers(data, root));
+    assert.equal(attended, text(sessionStartMembers(data, root, true)));
+    assert.ok(attended.endsWith(sessionLayer(data, root, true)));
+    assert.ok(attended.includes("# Rules: collaboration with the owner"));
+    const unattended = text(sessionStartMembers(data, root, false));
+    assert.ok(unattended.endsWith(sessionLayer(data, root, false)));
+    assert.ok(unattended.includes("# Rules: working without the owner"));
+    assert.ok(!unattended.includes("# Rules: collaboration with the owner"));
+  });
+});
+
+test("a delegate's member is the SubagentStart text alone", () => {
+  withProject((root) => {
+    const members = subagentStartMembers(data, root);
+    assert.deepEqual(
+      members.map((member) => member.name),
+      ["hook: subagent-start"],
+    );
+    assert.equal(members[0].text, subagentStartResult(data, root).additionalContext);
+    assert.equal(members[0].text, sessionLayer(data, root, false));
+  });
+});
+
 test("counting the hooks writes nothing", () => {
   withProject((root) => {
     const before = snapshot(root);
@@ -90,11 +115,12 @@ test("the text a hook injects is the text counted", () => {
     const text = (/** @type {string} */ name) => members.find((member) => member.name === `hook: ${name}`)?.text;
     const ceiling = staleGuardrailCeiling(data, root);
     assert.notEqual(ceiling, null);
-    assert.equal(text("session-start-agent"), sessionStartContext(data, root, null, ceiling));
+    const layer = sessionLayer(data, root, true);
+    assert.equal(text("session-start-agent"), sessionStartContext(data, root, null, ceiling, layer));
     assert.ok(ceiling?.includes("guardrails/_common.md"));
     assert.equal(
-      sessionStartResult(data, root)?.additionalContext,
-      sessionStartContext(data, root, null, staleGuardrailNotice(data, root)),
+      sessionStartResult(data, root, null, layer)?.additionalContext,
+      sessionStartContext(data, root, null, staleGuardrailNotice(data, root), layer),
     );
     const thresholds = readThresholds(root, data.learning);
     const wordings = [true, false].map(

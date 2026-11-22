@@ -1,0 +1,27 @@
+# A second-opinion run (`AKMON_SECOND_OPINION` set)
+# gets the unattended layer instead of the head layer (A49, D-A49-SELECTOR).
+id = "hooks/session-start-second-opinion-layer"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:session-start-agent"]
+
+[fixture]
+attach = "native"
+remove = ["_aitna/agents"]
+
+[env]
+AKMON_SECOND_OPINION = "1"
+
+[run]
+script = "session-start-agent"
+
+[run.payload]
+hook_event_name = "SessionStart"
+source = "startup"
+session_id = "sess-session-start-second-opinion-layer"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"# Rules: working without the owner\\n\\nCorpus stand-in for the unattended layer: what the session-start hook delivers to a session no owner attends, and what the subagent-start hook delivers to a delegate.\"}}\n"

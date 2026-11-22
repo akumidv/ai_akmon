@@ -21,10 +21,11 @@ import {
   pySuffix,
   transcriptsDir,
 } from "./transcripts.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 /** A fresh scratch directory (resolved, so a symlinked tmp does not skew a comparison). */
 function scratch() {
-  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-transcripts-")));
+  return tempDir("akmon-transcripts-");
 }
 
 /**

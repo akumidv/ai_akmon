@@ -21,6 +21,7 @@ import { checkData } from "../common/access_matrix.mjs";
 import { read } from "../common/jsondata.mjs";
 
 /** @typedef {import("../common/access_matrix.mjs").AccessMatrix} AccessMatrix */
+/** @typedef {import("../common/audience.mjs").AudienceData} AudienceData */
 /** @typedef {import("../common/harness_settings.mjs").HarnessSettingsData} HarnessSettingsData */
 /** @typedef {import("../common/learning.mjs").LearningData} LearningData */
 /** @typedef {import("../common/markers.mjs").MarkersData} MarkersData */
@@ -53,6 +54,7 @@ import { read } from "../common/jsondata.mjs";
  * @property {WorkStyleData} workStyle `common/work_style.json`
  * @property {AccessMatrix} accessMatrix `common/access_matrix.json`
  * @property {HarnessSettingsData} harnessSettings `common/harness_settings.json`
+ * @property {AudienceData} audience `common/audience.json`, the head and unattended layers' files
  */
 
 /** The tree this module executes from: `<tree>/js/hooks/hook_data.mjs` → `<tree>`. */
@@ -74,6 +76,7 @@ const FILES = {
   workStyle: "common/work_style.json",
   accessMatrix: "common/access_matrix.json",
   harnessSettings: "common/harness_settings.json",
+  audience: "common/audience.json",
 };
 
 /**

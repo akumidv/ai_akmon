@@ -1,8 +1,23 @@
 # Rules: collaboration with the owner
 
-How every agent, in every role and on every project, talks with the owner — the developer whose
-attention the work spends. Loaded at session start beside the [guardrails](../guardrails/_common.md),
-which hold the prohibitions; the shapes these rules use are in [templates](templates.md).
+How the **head session** — the one the owner attends — talks with the owner, in every role and on
+every project. A hook delivers it to that session only; a delegate and an autonomous run follow
+[unattended](unattended.md). Its shapes are in [templates](templates.md).
+
+## Role declaration
+
+- **State your role before project work and on every switch:** `🧭 role: <name> — <focus>`, picked by
+  operation ([roles/](../roles/README.md)); `🧭 agent:` is read as an alias for one release.
+
+Runtime check: role.declaration — subset (a switch is not observable); detail in [hooks/README.md](../hooks/README.md).
+
+## Analysis before mutation — with the owner
+
+- **An analysis-only turn produces words, not edits:** asked to analyze, explain, review, compare or
+  say what remains (*why, how, what's left, which is better, take a look, assess*), report findings
+  and a recommendation **in chat first**. The go-ahead the
+  [guardrail](../guardrails/_common.md#analysis-before-mutation) requires is the owner's, and a
+  consequential choice is put to the owner as a decision request.
 
 ## Language of a reply
 
@@ -14,14 +29,13 @@ which hold the prohibitions; the shapes these rules use are in [templates](templ
 
 ## Codes
 
-- **Every request for an owner decision carries a stable code** in bold uppercase: **D-TOPIC**, or
-  **D-C139-TOPIC** when it belongs to a task — a question, a decision or a confirmation alike. A code
-  names one bounded choice, not a position; it stays the same across reordering, turns and resumption
-  while the request is open and is never given to another open choice. A material change of scope
+- **Every request to the owner carries a stable code** in bold uppercase: **D-** for a decision (a
+  question, a choice, a confirmation), **G-** for an action (a go-ahead to write, commit, run, supply);
+  **D-C139-TOPIC** when it belongs to a task. A code names one bounded choice, not a position, stays
+  while the request is open, and is never given to another open choice; a material change of scope
   gets a new code.
-- **A code in a reply carries its gist.** A task id (`C138`) or a decision code is followed by 3–5
-  words saying what it is — up to 10 for a complex task — and a verdict is stated as the action to
-  take, not as a label.
+- **A code in a reply carries its gist:** a task id or a code is followed by 3–5 words (up to 10 for
+  a complex task), and a verdict is stated as the action to take, not as a label.
 
 ## Writing a request
 
@@ -36,8 +50,8 @@ which hold the prohibitions; the shapes these rules use are in [templates](templ
 ## The closing block
 
 - **Every reply that asks for, or leaves pending, an owner action ends with one `Needed from you`
-  block** and nothing after it, grouped under `Decide` — decisions — and `Act` — actions: a go-ahead
-  to write, a commit, a push, a release, a run, something to supply. It says when nothing is needed.
+  block** and nothing after it, grouped under `Decide` (decisions) and `Act` (actions). It says when
+  nothing is needed.
 - **Each request is one numbered item that decides correctly when read alone**, in short plain
   sentences, in the [item shape](templates.md#owner-request-item). Each option carries its cost and
   its weak spot, the recommended one above all; a weighed and rejected one is kept with `rejected` and
@@ -56,5 +70,4 @@ which hold the prohibitions; the shapes these rules use are in [templates](templ
   design or code choice in the block that carries a recommendation. **It never permits an action**;
   each action is closed only by an answer with its own code. An item with no recommendation stays
   pending. The owner names the exceptions by code, and an answer by code overrides the general one.
-- Where an open request is kept and how an answer enters the record:
-  [design-flow § Decision requests](../pipelines/design-flow.md#decision-requests).
+- Where a request is kept and an answer recorded: [design-flow](../pipelines/design-flow.md#decision-requests).

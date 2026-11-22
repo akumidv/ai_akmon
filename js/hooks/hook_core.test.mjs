@@ -9,7 +9,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -47,23 +46,23 @@ import {
   reportUnclassifiedShellRoute,
   roleOnCodeResult,
   runtimeRootDisplay,
+  sessionLayer,
+  sessionStartContext,
   sessionStartResult,
   shellTool,
   staleGuardrailNotice,
+  subagentStartResult,
   subagentTool,
 } from "./hook_core.mjs";
 import { TREE_ROOT, lazyHookData } from "./hook_data.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 
 const data = lazyHookData();
 
-/** Run `body` with a fresh directory, removed after. */
+/** Run `body` with a fresh directory (`tempDir` removes it when the process exits). */
 function withDir(/** @type {(dir: string) => void} */ body) {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-hook-core-test-"));
-  try {
-    body(dir);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-hook-core-test-");
+  body(dir);
 }
 
 /** Run `body` with `TMPDIR` a fresh directory (the markers and counters land there) and `env` set. */
@@ -118,6 +117,7 @@ test("HookResult: one options object, null defaults, frozen", () => {
       systemMessage: null,
       decision: null,
       reason: null,
+      updatedInput: null,
     },
   );
   assert.ok(Object.isFrozen(result));
@@ -706,18 +706,14 @@ test("the trailer floor is decided before and without the access matrix, for eve
 });
 
 test("a hook data bundle refuses a matrix that softens the trailer floor, on every access", () => {
-  const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-matrix-"));
-  try {
-    fs.mkdirSync(posix.join(root, "common"), { recursive: true });
-    const softened = JSON.parse(fs.readFileSync(posix.join(TREE_ROOT, "common", "access_matrix.json"), "utf8"));
-    softened.autonomous.ai_trailer = "ask";
-    fs.writeFileSync(posix.join(root, "common", "access_matrix.json"), JSON.stringify(softened));
-    const bundle = lazyHookData(root);
-    assert.throws(() => bundle.accessMatrix, DataFileError);
-    assert.throws(() => bundle.accessMatrix, DataFileError);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  const root = tempDir("akmon-matrix-");
+  fs.mkdirSync(posix.join(root, "common"), { recursive: true });
+  const softened = JSON.parse(fs.readFileSync(posix.join(TREE_ROOT, "common", "access_matrix.json"), "utf8"));
+  softened.autonomous.ai_trailer = "ask";
+  fs.writeFileSync(posix.join(root, "common", "access_matrix.json"), JSON.stringify(softened));
+  const bundle = lazyHookData(root);
+  assert.throws(() => bundle.accessMatrix, DataFileError);
+  assert.throws(() => bundle.accessMatrix, DataFileError);
 });
 
 test("an unattended ask is a deny that spells the permission mode with repr()", () => {
@@ -780,6 +776,14 @@ test("the delegation ask follows attendance", () => {
       const result = nudge(tmp, `att${n++}`, "shell", "130 125.0", { permissionMode: mode, attended })[1];
       assert.equal(result?.permissionDecision, passes ? "ask" : "deny", `${mode} ${attended}`);
     }
+  });
+});
+
+test("the analysis-guard message cites the head's rule, not the guardrail section that moved (A49)", () => {
+  withState({}, () => {
+    const result = analysisWriteResult(data, "edit", "/proj/_aitna/TASKS.md", "s-cite", "/proj");
+    const message = String(result?.additionalContext);
+    assert.ok(message.endsWith("Rule: rules/collaboration.md § Analysis before mutation — with the owner."), message);
   });
 });
 
@@ -1224,6 +1228,50 @@ test("sessionStartResult: a package project with a stale copy says so on both ch
   withDir((dir) => {
     project(dir, { mount: false, agents: false });
     assert.equal(sessionStartResult(data, dir), null);
+  });
+});
+
+test("sessionStartContext: the layer is last, after the roster and the stale line, and on every source (A49, M246)", () => {
+  withDir((dir) => {
+    project(dir, { mount: true });
+    const plain = String(sessionStartContext(data, dir, null, null));
+    const withLayer = String(sessionStartContext(data, dir, null, "STALE", "LAYER"));
+    assert.equal(withLayer, `${sessionStartContext(data, dir, null, "STALE")}\nLAYER`);
+    assert.ok(withLayer.startsWith(plain));
+    assert.equal(sessionStartResult(data, dir, null, "LAYER")?.additionalContext, `${plain}\nLAYER`);
+    assert.equal(sessionStartResult(data, dir, null, "LAYER")?.systemMessage, null);
+  });
+});
+
+test("sessionStartContext: without a roster the layer is all there is, joined to a stale line, or null for neither", () => {
+  withDir((dir) => {
+    project(dir, { mount: true, agents: false });
+    assert.equal(sessionStartContext(data, dir, null, null), null);
+    assert.equal(sessionStartContext(data, dir, null, null, "LAYER"), "LAYER");
+    assert.equal(sessionStartContext(data, dir, null, "STALE", null), "STALE");
+    assert.equal(sessionStartContext(data, dir, null, "STALE", "LAYER"), "STALE\nLAYER");
+    assert.equal(sessionStartResult(data, dir, null, "LAYER")?.additionalContext, "LAYER");
+    assert.equal(sessionStartResult(data, dir), null);
+  });
+});
+
+test("sessionLayer reads the tree this hook runs from: the head layer, or the unattended one (A49)", () => {
+  withDir((dir) => {
+    project(dir, { mount: false, agents: false });
+    assert.ok(sessionLayer(data, dir, true).startsWith("# Rules: collaboration with the owner"));
+    assert.ok(sessionLayer(data, dir, true).includes("\n\n# Rules: templates"));
+    assert.ok(sessionLayer(data, dir, false).startsWith("# Rules: working without the owner"));
+  });
+});
+
+test("subagentStartResult is a SubagentStart document carrying the unattended layer alone (A49)", () => {
+  withDir((dir) => {
+    project(dir, { mount: false });
+    const result = subagentStartResult(data, dir);
+    assert.equal(result.eventName, "SubagentStart");
+    assert.equal(result.additionalContext, sessionLayer(data, dir, false));
+    assert.equal(result.systemMessage, null);
+    assert.equal(result.permissionDecision, null);
   });
 });
 

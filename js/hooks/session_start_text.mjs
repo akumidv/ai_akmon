@@ -27,7 +27,13 @@ import {
   sessionStartCeiling,
   toolCommandCeiling,
 } from "../tools/model_routing/routing.mjs";
-import { akmonRuntimeRoot, sessionStartContext, staleGuardrailCeiling } from "./hook_core.mjs";
+import {
+  akmonRuntimeRoot,
+  sessionLayer,
+  sessionStartContext,
+  staleGuardrailCeiling,
+  subagentStartResult,
+} from "./hook_core.mjs";
 
 /** @typedef {import("./hook_data.mjs").HookData} HookData */
 
@@ -79,16 +85,32 @@ function _routingText(data, root) {
 
 /**
  * The SessionStart hook texts for the project at `root`, one member per hook that has something to say.
+ *
+ * `attended` picks the layer the session-start hook appends: the head layer (the default, the largest
+ * audience the cap is checked against) or the unattended one.
  * @param {HookData} data
  * @param {string} root
+ * @param {boolean} [attended]
  * @returns {Member[]}
  */
-export function sessionStartMembers(data, root) {
+export function sessionStartMembers(data, root, attended = true) {
+  const layer = sessionLayer(data, root, attended);
   /** @type {Array<[string, string | null]>} */
   const texts = [
-    ["session-start-agent", sessionStartContext(data, root, null, staleGuardrailCeiling(data, root))],
+    ["session-start-agent", sessionStartContext(data, root, null, staleGuardrailCeiling(data, root), layer)],
     ["model-routing", _routingText(data, root)],
     ["learning-reminder", reminderCeiling(readThresholds(root, data.learning), data.learning)],
   ];
   return texts.flatMap(([name, text]) => (text === null ? [] : [new Member(`hook: ${name}`, text)]));
+}
+
+/**
+ * The SubagentStart hook text a delegate carries for the project at `root`: its one member.
+ * @param {HookData} data
+ * @param {string} root
+ * @returns {Member[]}
+ */
+export function subagentStartMembers(data, root) {
+  const text = subagentStartResult(data, root).additionalContext;
+  return text === null || text === undefined ? [] : [new Member("hook: subagent-start", text)];
 }

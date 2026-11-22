@@ -1050,6 +1050,7 @@ function _agentsBlock(data, { aitna, repo, ref, archetype, language, profiles, m
     roles_hint: rolesHint,
     imports_region: importsRegion(readSyncData(), base).join("\n"),
     profiles_dir: `${base}/profiles`,
+    standard_base: base,
     profile_imports: profiles.map((profile) => `\n@${base}/profiles/${profile}`).join(""),
     pre_commit: link("pipelines/pre-commit.md"),
     review_flow: link("pipelines/review-flow.md"),

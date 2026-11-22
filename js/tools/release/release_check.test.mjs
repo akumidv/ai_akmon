@@ -8,9 +8,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
+import { tempDir } from "../../common/temp_dir.test.mjs";
 import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { read } from "../../common/jsondata.mjs";
 import {
@@ -61,7 +61,7 @@ function capture(fn) {
  * @returns {string}
  */
 function tree(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "release-check-test-"));
+  const dir = tempDir("release-check-test-");
   for (const [name, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true });
     fs.writeFileSync(path.join(dir, name), text);

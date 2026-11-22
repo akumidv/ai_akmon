@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude SessionStart wrapper for the akmon active-agent reminder.
+"""Claude SessionStart wrapper for the akmon active-agent reminder and the audience's layer.
 
 The reminder logic lives in ``hook_core.py`` and returns a vendor-neutral ``HookResult``.
 This entrypoint only adapts Claude Code's JSON payload/output shape so existing
@@ -12,7 +12,9 @@ import os
 from pathlib import Path
 
 from claude_adapter import load_payload, run_guarded
-from hook_core import HookResult, session_start_result
+from hook_core import HookResult, session_layer, session_start_result
+
+from common import audience  # hook_core puts the tree root on sys.path
 
 
 def _project_root(payload: dict) -> Path:
@@ -23,7 +25,11 @@ def _project_root(payload: dict) -> Path:
 def _decide() -> HookResult | None:
     payload = load_payload()
     session_id = payload.get("session_id")
-    return session_start_result(_project_root(payload), session_id if isinstance(session_id, str) else None)
+    root = _project_root(payload)
+    # The environment is read here, once, and passed down. The audience's layer rides on every ``source``:
+    # compaction drops what was given only at startup (M246).
+    layer = session_layer(root, attended=audience.is_attended(os.environ))
+    return session_start_result(root, session_id if isinstance(session_id, str) else None, layer)
 
 
 def main() -> int:

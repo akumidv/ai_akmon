@@ -6,11 +6,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { dirname, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { aitnaRootName, devRoot, findProjectRoot, isProjectRoot } from "./project_root.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 const REPO = posix.resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -19,7 +19,7 @@ const REPO = posix.resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
  * @returns {string}
  */
 function project(pointer = null) {
-  const root = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-dev-root-")));
+  const root = tempDir("akmon-dev-root-");
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# A\n");
   if (pointer !== null) {
     fs.writeFileSync(posix.join(root, ".aitna-root"), pointer);
@@ -52,7 +52,7 @@ for (const line of ["/abs/place", "../escaped", "a/../../escaped", "", "one\ntwo
 
 test("a symlink leaving the project is refused", () => {
   const root = project("leak");
-  const outside = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-dev-root-out-"));
+  const outside = tempDir("akmon-dev-root-out-");
   fs.symlinkSync(outside, posix.join(root, "leak"));
   assert.throws(() => devRoot(root), /resolves outside the project root/);
 });

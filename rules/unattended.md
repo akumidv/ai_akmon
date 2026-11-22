@@ -19,6 +19,13 @@ learning run finds in delegate or autonomous sessions is proposed here.
   destructive or irreversible and the brief does not authorize it. Then return what is done, what
   blocks, and the one question that unblocks it, not one question per doubt.
 
+## The go-ahead and the owner's choices
+
+- **The brief is the go-ahead** the [guardrail](../guardrails/_common.md#analysis-before-mutation)
+  requires: write what it asks for, within its scope, and nothing it only asks you to analyze.
+- **A consequential choice — math, data shape, architecture — is not yours to make.** A delegate
+  reports it as options for the head; an autonomous run records it for the owner (below).
+
 ## The report — to the head, not to the owner
 
 - **English**, whatever language the owner or a memory note uses for chat: the head translates.
@@ -33,4 +40,3 @@ learning run finds in delegate or autonomous sessions is proposed here.
 - **A decision that needs the owner is recorded where the owner will read it:** the pull request's
   description or a backlog row, with its options and a recommendation. The run goes on along the
   reversible option, or ends at that point when none is reversible.
-- **Its brief is its go-ahead:** the run writes what the brief asks for, within the brief's scope.

@@ -1,5 +1,5 @@
 /**
- * Claude SessionStart wrapper for the akmon active-agent reminder — the JavaScript twin of
+ * Claude SessionStart wrapper for the akmon active-agent reminder and the audience's layer — the JavaScript twin of
  * `hooks/session-start-agent.py` (ADR 0020 D01).
  *
  * The reminder logic lives in `hook_core.mjs` and returns a vendor-neutral `HookResult`. This
@@ -7,9 +7,10 @@
  * `.claude/settings.json` wiring can keep pointing here.
  */
 
+import { isAttended } from "../common/audience.mjs";
 import { dictGet, pyError, pyPath, pyTypeName, truthy } from "../common/pyvalue.mjs";
 import { loadPayload, runAsEntryPoint, runGuarded } from "./claude_adapter.mjs";
-import { sessionStartResult } from "./hook_core.mjs";
+import { sessionLayer, sessionStartResult } from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
 
 /** @typedef {import("./claude_adapter.mjs").Payload} Payload */
@@ -42,7 +43,11 @@ export function main() {
   return runGuarded("session-start-agent", data, () => {
     const payload = loadPayload();
     const sessionId = dictGet(payload, "session_id");
-    return sessionStartResult(data, sessionRoot(payload), typeof sessionId === "string" ? sessionId : null);
+    const root = sessionRoot(payload);
+    // The environment is read here, once, and passed down. The audience's layer rides on every `source`:
+    // compaction drops what was given only at startup (M246).
+    const layer = sessionLayer(data, root, isAttended(data.learning, process.env));
+    return sessionStartResult(data, root, typeof sessionId === "string" ? sessionId : null, layer);
   });
 }
 

@@ -5,7 +5,8 @@ D-A49-HOOKCOUNT (a) (task A49) adds the hooks that ``bin/sync.json`` wires on Se
 ``session-start-agent``, ``model-routing`` and ``learning-reminder`` — so that moving a rule from an
 imported file into a hook is not a false saving. This module is the counter's side: it builds each
 hook's text *in-process, from the functions the hook itself calls*, and returns it as
-:class:`common.always_loaded.Member` rows.
+:class:`common.always_loaded.Member` rows — for the attended head, the unattended head (the other layer
+on the same hooks) and a delegate (the SubagentStart text alone).
 
 A **ceiling**, not the text of one session: every optional line is present (the roster, the delegation,
 work-style and memory lines, the stale-guardrail notice naming every materialized file, the learning
@@ -28,8 +29,10 @@ sys.path.insert(0, str(_TREE_ROOT / "tools" / "model_routing"))
 import routing  # noqa: E402
 from hook_core import (  # noqa: E402
     akmon_runtime_root,
+    session_layer,
     session_start_context,
     stale_guardrail_ceiling,
+    subagent_start_result,
 )
 
 from common import learning  # noqa: E402
@@ -59,12 +62,23 @@ def _routing_text(root: Path) -> str | None:
         return None
 
 
-def session_start_members(root: Path) -> tuple[Member, ...]:
-    """The SessionStart hook texts for the project at ``root``, one member per hook that has something to say."""
+def session_start_members(root: Path, *, attended: bool = True) -> tuple[Member, ...]:
+    """The SessionStart hook texts for the project at ``root``, one member per hook that has something to say.
+
+    ``attended`` picks the layer the session-start hook appends: the head layer (the default, the largest
+    audience the cap is checked against) or the unattended one.
+    """
     data = learning.read_data()
+    layer = session_layer(root, attended=attended)
     texts = {
-        "session-start-agent": session_start_context(root, None, stale_guardrail_ceiling(root)),
+        "session-start-agent": session_start_context(root, None, stale_guardrail_ceiling(root), layer),
         "model-routing": _routing_text(root),
         "learning-reminder": learning.reminder_ceiling(learning.read_thresholds(root, data), data),
     }
     return tuple(Member(f"hook: {name}", text) for name, text in texts.items() if text is not None)
+
+
+def subagent_start_members(root: Path) -> tuple[Member, ...]:
+    """The SubagentStart hook text a delegate carries for the project at ``root``: its one member."""
+    text = subagent_start_result(root).additional_context
+    return (Member("hook: subagent-start", text),) if text is not None else ()

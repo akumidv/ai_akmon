@@ -5,11 +5,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { ACTORS } from "../common/access_matrix.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 import {
   browserCommandDrives,
   browserGuardResult,
@@ -289,17 +289,13 @@ test("the strictest decision wins, and the first of equals", () => {
 
 test("a git ask does not hide the browser deny", () => {
   const command = "git commit -m x && akmon tool browser status";
-  const directory = mkdtempSync(join(tmpdir(), "akmon-browser-guard-"));
-  try {
-    const git = gitCommitGuardResult(data, command, { directory, attended: true });
-    assert.equal(git?.permissionDecision, "ask");
-    const browser = browserGuardResult(data, "Bash", command, { actor: ACTORS.DEVELOPER, delegated: true });
-    const chosen = strictestResult([git, browser]);
-    assert.equal(chosen?.permissionDecision, "deny");
-    assert.match(chosen?.permissionReason ?? "", /delegated agent/);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const directory = tempDir("akmon-browser-guard-");
+  const git = gitCommitGuardResult(data, command, { directory, attended: true });
+  assert.equal(git?.permissionDecision, "ask");
+  const browser = browserGuardResult(data, "Bash", command, { actor: ACTORS.DEVELOPER, delegated: true });
+  const chosen = strictestResult([git, browser]);
+  assert.equal(chosen?.permissionDecision, "deny");
+  assert.match(chosen?.permissionReason ?? "", /delegated agent/);
 });
 
 /**
@@ -308,7 +304,7 @@ test("a git ask does not hide the browser deny", () => {
  * @returns {string}
  */
 function project(attached) {
-  const directory = mkdtempSync(join(tmpdir(), "akmon-browser-guard-"));
+  const directory = tempDir("akmon-browser-guard-");
   writeFileSync(join(directory, "AGENTS.md"), "# project\n");
   writeFileSync(join(directory, ".aitna-root"), "_aitna\n");
   if (attached) {
@@ -320,39 +316,26 @@ function project(attached) {
 
 test("in attach mode the agent never closes the page, whoever it is", () => {
   const directory = project(true);
-  try {
-    for (const toolName of ["mcp__akmon-browser__close_page", "mcp__akmon-browser__close_window"]) {
-      for (const options of [{}, { delegated: true }, { actor: ACTORS.AUTONOMOUS }]) {
-        const result = browserGuardResult(data, toolName, "", { ...options, directory });
-        assert.equal(result?.permissionDecision, "deny", toolName);
-      }
+  for (const toolName of ["mcp__akmon-browser__close_page", "mcp__akmon-browser__close_window"]) {
+    for (const options of [{}, { delegated: true }, { actor: ACTORS.AUTONOMOUS }]) {
+      const result = browserGuardResult(data, toolName, "", { ...options, directory });
+      assert.equal(result?.permissionDecision, "deny", toolName);
     }
-    const developer = browserGuardResult(data, "mcp__akmon-browser__close_page", "", { directory });
-    assert.match(developer?.permissionReason ?? "", /attach mode/);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
   }
+  const developer = browserGuardResult(data, "mcp__akmon-browser__close_page", "", { directory });
+  assert.match(developer?.permissionReason ?? "", /attach mode/);
 });
 
 test("without an attach a developer closes pages, and other tools are not held", () => {
   const detached = project(false);
   const attached = project(true);
-  try {
-    assert.equal(browserGuardResult(data, "mcp__akmon-browser__close_page", "", { directory: detached }), null);
-    assert.equal(browserGuardResult(data, "mcp__akmon-browser__take_snapshot", "", { directory: attached }), null);
-    assert.equal(browserGuardResult(data, "mcp__other-server__close_page", "", { directory: attached }), null);
-  } finally {
-    rmSync(detached, { recursive: true, force: true });
-    rmSync(attached, { recursive: true, force: true });
-  }
+  assert.equal(browserGuardResult(data, "mcp__akmon-browser__close_page", "", { directory: detached }), null);
+  assert.equal(browserGuardResult(data, "mcp__akmon-browser__take_snapshot", "", { directory: attached }), null);
+  assert.equal(browserGuardResult(data, "mcp__other-server__close_page", "", { directory: attached }), null);
 });
 
 test("an unresolvable project skips the attach check", () => {
-  const directory = mkdtempSync(join(tmpdir(), "akmon-browser-guard-"));
-  try {
-    assert.equal(browserGuardResult(data, "mcp__akmon-browser__close_page", "", { directory }), null);
-    assert.equal(browserGuardResult(data, "mcp__akmon-browser__close_page"), null);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const directory = tempDir("akmon-browser-guard-");
+  assert.equal(browserGuardResult(data, "mcp__akmon-browser__close_page", "", { directory }), null);
+  assert.equal(browserGuardResult(data, "mcp__akmon-browser__close_page"), null);
 });

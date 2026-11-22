@@ -25,6 +25,7 @@
   "event_names": {
     "PreToolUse": "preToolUse",
     "SessionStart": "sessionStart",
+    "SubagentStart": "subagentStart",
     "UserPromptSubmit": "userPromptSubmit"
   },
   "trust_statuses": ["managed", "untrusted", "trusted", "modified"],

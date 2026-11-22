@@ -310,13 +310,13 @@ expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"Stop\", \"addit
 [[case]]
 id = "render/every-field"
 fn = "render_result"
-args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "c", "permission_decision": "ask", "permission_reason": "r", "system_message": "m", "decision": "block", "reason": "why"}}]'
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "PreToolUse", "additional_context": "c", "permission_decision": "ask", "permission_reason": "r", "system_message": "m", "decision": "block", "reason": "why", "updated_input": null}}]'
 expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"additionalContext\": \"c\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"r\"}, \"decision\": \"block\", \"reason\": \"why\", \"systemMessage\": \"m\"}"'
 
 [[case]]
 id = "render/empty-strings-are-emitted"
 fn = "render_result"
-args_json = '[{"$new": "HookResult", "fields": {"event_name": "", "additional_context": "", "permission_decision": "", "permission_reason": "", "system_message": "", "decision": "", "reason": ""}}]'
+args_json = '[{"$new": "HookResult", "fields": {"event_name": "", "additional_context": "", "permission_decision": "", "permission_reason": "", "system_message": "", "decision": "", "reason": "", "updated_input": null}}]'
 expected_json = '"{\"hookSpecificOutput\": {\"hookEventName\": \"\", \"additionalContext\": \"\", \"permissionDecision\": \"\", \"permissionDecisionReason\": \"\"}, \"decision\": \"\", \"reason\": \"\", \"systemMessage\": \"\"}"'
 
 [[case]]

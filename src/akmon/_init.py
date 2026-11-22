@@ -805,6 +805,7 @@ def _agents_block(aitna: str, ref: str, classification: _Classification, *, pack
             "roles_hint": roles_hint,
             "imports_region": region,
             "profiles_dir": profiles_dir,
+            "standard_base": base,
             "profile_imports": "".join(f"\n@{profiles_dir}/{profile}" for profile in classification.profiles),
             "pre_commit": link("pipelines/pre-commit.md"),
             "review_flow": link("pipelines/review-flow.md"),

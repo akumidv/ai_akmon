@@ -97,10 +97,22 @@ project-local hook surface.
   legacy role-named directory whose agent has a charter of its own), and the "read
   `_aitna/memory/` at session start" rule. In mode `package` it also reports guardrails under
   `_aitna/.akmon/guardrails/` that the running package has moved past — the copy the harness
-  `@`-imports going stale after a pin bump is otherwise silent until the next CI run. Runs as a
-  **SessionStart** hook.
+  `@`-imports going stale after a pin bump is otherwise silent until the next CI run. It also appends
+  the session's **audience layer** (A49, [`../docs/design/context-audiences.md`](../docs/design/context-audiences.md)),
+  on every `source` — compaction drops text given only at startup (M246) — and with no roster too: the
+  head layer (`rules/collaboration.md` and `rules/templates.md`, read from the tree the hook runs from) for
+  a session an owner attends, the unattended layer (`rules/unattended.md`) for any other. A session is
+  attended only when the actor is `developer`, `CLAUDE_CODE_SESSION_ATTENDED` is not `0` and
+  `AKMON_SECOND_OPINION` is unset ([`../common/audience.py`](../common/audience.py), read once at the entry
+  point). Runs as a **SessionStart** hook.
+- [`subagent-start.py`](subagent-start.py) — Claude **SubagentStart** hook (A49): puts the unattended
+  layer, `rules/unattended.md`, in the context of the delegate that is starting (`additionalContext`
+  reaches the subagent, M247; on Codex it reaches the child and never the head, M250), so a delegate gets
+  the rules for working without an owner and none of the owner-dialogue rules. No matcher.
 - [`role-on-code.py`](role-on-code.py) — Claude PreToolUse wrapper for the *switch* backstop
-  for the same "Role declaration" convention: SessionStart only fires once, so a **design→code switch mid-session** (architect →
+  for the head session's "Role declaration" convention
+  ([`../rules/collaboration.md`](../rules/collaboration.md)); a subagent's call (the payload carries
+  `agent_id`) is exempt, as in the delegation nudge (C28d), since a delegate declares no role: SessionStart only fires once, so a **design→code switch mid-session** (architect →
   writing code) goes unannounced. On the **first** `Edit`/`Write`/`MultiEdit`/`apply_patch` of a
   session that targets a **code file** (extension allow-list; docs/design/memory/akmon paths
   excluded) it reminds the model that editing code is **realization** → declare the **engineer**
@@ -122,7 +134,10 @@ project-local hook surface.
 - [`analysis-guard.py`](analysis-guard.py) — Claude PreToolUse wrapper for the neutral
   analysis-before-mutation reminder: on the first edit to a planning/design doc in a session,
   remind the assistant to stop and ask confirmation if the current turn was analysis-only, and
-  to declare the role (assessing the as-is = `review`; constructing the design = `architect`).
+  to declare the role (assessing the as-is = `review`; constructing the design = `architect`). It states
+  the head session's reading of the rule ([`../rules/collaboration.md`](../rules/collaboration.md)
+  § Analysis before mutation — with the owner), so a subagent's call (the payload carries `agent_id`) is
+  exempt: a delegate's brief is its go-ahead.
 - [`model-routing.py`](model-routing.py) — Claude wrapper for **model routing** (MODEL.md §
   Capability tiers). Runs on **SessionStart** and **UserPromptSubmit**: both read the session
   transcript (`transcript_path`) to detect the model the main chain actually runs on, and
@@ -213,8 +228,21 @@ project-local hook surface.
   The weights and thresholds come from a replay of recorded sessions (C88, M72–M75). Runs as a **PreToolUse →
   Bash|Edit|Write|MultiEdit|Task|Agent|Read|Grep|Glob** hook (one combined-matcher entry
   seeing the mutations, the reads/sweeps, and the delegation resets).
-- [`codex-hook.py`](codex-hook.py) — Codex command-hook entrypoint for SessionStart,
-  role-on-code and analysis reminders. It emits Codex `hookSpecificOutput` context.
+- [`codex-hook.py`](codex-hook.py) — Codex command-hook entrypoint for SessionStart, SubagentStart,
+  role-on-code and analysis reminders (the `subagent-start` route delivers the unattended layer to a
+  child; the two reminders skip a call whose payload carries `agent_id`, M192). It emits Codex
+  `hookSpecificOutput` context.
+  Its `spawn-guard` route is wired on its own PreToolUse group, matcher `collaborationspawn_agent` — the
+  whole name of Codex's spawn tool, which no other spelling matches (M256). A spawn whose `fork_turns` is
+  missing (which means `all`) or anything but `none` is rewritten to `none` with
+  `{"permissionDecision": "allow", "updatedInput": <the whole received input>}`: `updatedInput` replaces the
+  input, so it carries every received field, the opaque `message` included, and without the allow decision
+  Codex reports the hook `Failed` (M257). The reason: a child forked with `all` inherits the parent's
+  history, and with it the head-only owner-dialogue layer SessionStart delivered (M250), against
+  [`../rules/unattended.md`](../rules/unattended.md). A spawn that already says `none` gets no output. A
+  crash exits 1, which Codex shows as `Failed` while the spawn runs unchanged — fail-open, like the other
+  routes. The group is a new matcher group, so the host's approval of the generated hooks (`/hooks`) is
+  asked again (M21).
   Its PreToolUse matcher is **`Bash|apply_patch`** — one name per *route*, measured on codex
   0.146.0, where `Edit`/`Write`/`apply_patch` are three aliases for the same patch call and
   the shell matches as `Bash`. A Bash command is classified as an edit only when a recognized

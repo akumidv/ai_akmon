@@ -45,11 +45,14 @@ from hook_core import (
     locate_project_root,
     report_unclassified_shell_route,
     role_on_code_result,
+    session_layer,
     session_start_result,
     shell_tool,
+    spawn_fork_result,
+    subagent_start_result,
 )
 
-from common import access_matrix, jsondata, learning, work_style  # hook_core put the tree root on sys.path
+from common import access_matrix, audience, jsondata, learning, work_style  # hook_core put the tree root on sys.path
 from common.markers import (
     claim_diagnostic_marker,
     marker_kind,
@@ -152,6 +155,10 @@ def _advisory(payload: dict, decide: Advisory) -> None:
         return
     if kind == edit_tool() and unmeasured_path_source(payload):
         _report_unmeasured_path_source(payload)
+    if payload.get("agent_id"):
+        # A child's tool events carry ``agent_id`` (M192). The role line and the go-ahead are the head's rules,
+        # so the advisories stay silent for a delegate, as the delegation nudge is (C28d).
+        return
     root = _payload_root(payload)
     for path in paths:
         result = decide(kind, path, sid, root)
@@ -163,7 +170,22 @@ def _advisory(payload: dict, decide: Advisory) -> None:
 def _session_start(payload: dict) -> None:
     start = Path(cwd(payload)) if cwd(payload) else None
     sid = session_id(payload)
-    print_result(session_start_result(find_project_root(start), None if sid == unidentified_identity() else sid))
+    root = find_project_root(start)
+    # The environment is read here, at the entry point, and passed down: the audience's layer rides on every
+    # ``source`` (``startup|resume|clear|compact``, M246), so a compacted session keeps it.
+    layer = session_layer(root, attended=audience.is_attended(os.environ))
+    print_result(session_start_result(root, None if sid == unidentified_identity() else sid, layer))
+
+
+def _subagent_start(payload: dict) -> None:
+    """The unattended layer for a Codex child, which reaches the child and never the head (M250)."""
+    start = Path(cwd(payload)) if cwd(payload) else None
+    print_result(subagent_start_result(find_project_root(start)))
+
+
+def _spawn_guard(payload: dict) -> None:
+    """Keep a spawned child out of the head's history (M256, M257); a crash exits 1 and the spawn runs unchanged."""
+    print_result(spawn_fork_result(payload.get("tool_input")))
 
 
 def _learning_reminder(payload: dict) -> None:
@@ -242,6 +264,10 @@ def _dispatch(route: str, payload: dict) -> None:
         _advisory(payload, role_on_code_result)
     elif route == "session-start":
         _session_start(payload)
+    elif route == "subagent-start":
+        _subagent_start(payload)
+    elif route == "spawn-guard":
+        _spawn_guard(payload)
     elif route == "learning-reminder":
         _learning_reminder(payload)
     elif route == "work-style":

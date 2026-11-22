@@ -1,9 +1,7 @@
 # Starting context by audience — the head, the delegate, the autonomous run
 
-Task **A49** (actualize the starting context). Status: **direction accepted** (D-A49-AUDIENCE (a),
-D-A49-UNATTENDED (a), D-A49-OMIT-NOW (a)); the probes are run (§6), and their gaps are listed in §4.
-The questions in §7 are open. No decision block is written yet: it goes into an ADR when the trunk
-of §5 lands.
+Task **A49** (actualize the starting context). Status: **decided** — [ADR 0033](../adr/0033-starting-context-by-audience.md) D01–D06; the trunk
+of §5 is built, and the refinements are open.
 
 ## 1. Essence
 
@@ -61,7 +59,7 @@ analysis. They are not yet a `MEASUREMENTS.md` row.
   - from the guardrail, the owner-facing half of Analysis before mutation: report in chat first,
     write after a go-ahead.
 
-  Which further guardrail sections move is open (**D-A49-FLOOR-KEEP**, §7).
+  The other guardrail sections stay in the floor, each with a reading per audience (§7).
 - **Stays in the floor:**
   - Language (artifacts English), Secrets, Privilege, Commits, Verify, Documentation hygiene and
     Scope;
@@ -104,7 +102,7 @@ cell is a gap.
 - The entry file holds only what every agent may read: the floor, plus one fallback line for a
   session whose hook does not run.
 
-How the hook chooses between the head layer and the unattended layer is open (**D-A49-SELECTOR**,
+How the hook chooses between the head layer and the unattended layer is decided (**D-A49-SELECTOR**,
 §7). The actor alone is not enough: a missing `AKMON_ACTOR` reads as `developer`, so a headless
 run launched without it would get the head layer.
 
@@ -119,7 +117,7 @@ measured.
 **Per harness:**
 
 - **Claude Code:** the hook carriers above. The refinement adds `omitClaudeMd: true` for the
-  read-only delegates. The mechanism that gives those delegates the floor is open
+  read-only delegates. The mechanism that gives those delegates the floor is decided
   (**D-A49-OMIT-CARRIER**, §7).
 - **Codex** (required by the owner): the entry file reaches every subagent and cannot be withheld
   (M251), so it holds the floor. SessionStart carries the head layer and SubagentStart the unattended
@@ -137,7 +135,7 @@ measured.
   M254), so the entry file holds the floor.
   - Today the head gets the dialogue rules reliably, through the expanded imports. Removing them
     before Qwen has a measured head carrier would weaken the Qwen head. The carrier until then is
-    open (**D-A49-QWEN-CARRIER**, §7).
+    decided (**D-A49-QWEN-CARRIER**, §7).
   - The hook route has three candidates: folder trust, stored approvals, and the system-level
     settings that ran in M255.
   - SessionStart on `resume` and on compaction is not measured.
@@ -206,25 +204,41 @@ The probes are run (D-A49-PROBES, owner-approved), as rows M246–M255:
 
 Results: [`meta/experiments/a49-context-audiences.md`](../../meta/experiments/a49-context-audiences.md).
 
-## 7. Open
+## 7. Answered
 
-These need the owner's decision before the trunk lands:
+- **D-A49-SELECTOR (a)**, to be watched in practice: a session gets the head layer only when the
+  actor is `developer`, the harness's attendance flag is not `0` (M199) and the second-opinion
+  marker is not set; any other session gets the unattended layer.
+- **D-A49-FLOOR-KEEP (a)**, with the owner's refinement: Plan shape, Route by task kind and the
+  owner's consequential choices stay in the floor as one core each, and each audience gets its own
+  reading. The floor says what binds everyone (write only on a go-ahead; consequential choices are the
+  owner's); `rules/collaboration.md` says how the head asks the owner; `rules/unattended.md` says that
+  the brief is the go-ahead and that a consequential choice is reported, not made. Role declaration
+  moved to `rules/collaboration.md`.
+- **D-A49-OMIT-CARRIER (a):** read-only delegates get the floor from one SubagentStart text.
+- **D-A49-QWEN-CARRIER (a)**, as the owner put it: where a harness cannot separate the audiences,
+  it gets one version, the developer's, as today. For Qwen Code a generated `QWEN.md` imports the head
+  layer, and its subagents see it as they do today (M254). Audiences are separated only where the
+  harness can carry it.
+- **Codes:** a request for a decision keeps **D-**, and a request for an action takes **G-**, so the
+  two cannot be confused (`rules/collaboration.md` § Codes).
+- **Harness forks as a rule of the domain** (owner, on D-A49-PROBE-FORK): the logic that forks per
+  harness lives in the hooks and adapters, each harness implementing the shared interface through the
+  carriers it has. This is a rule for any project that builds agent tooling, so it is the domain
+  profile [`agent-harness`](../../profiles/agent-harness.md), suggested by the new archetype
+  `agent-tooling`, which akmon declares for itself.
 
-- **D-A49-SELECTOR:** what tells the hook that nobody attends. The candidates are the actor, the
-  harness's attendance flag (M199) and the second-opinion marker.
-- **D-A49-FLOOR-KEEP:** whether Plan shape, Route by task kind and the owner-accept bullet stay in
-  the floor. They bind an autonomous orchestrator too, and they restrain a delegate's action.
-- **D-A49-OMIT-CARRIER:** whether read-only delegates get the floor from one SubagentStart text or
-  from a charter generated into each agent file.
-- **D-A49-QWEN-CARRIER:** the Qwen head carrier until the hook route is measured.
-- **D-A49-PROBE-FORK:** a probe of a Codex guard that steers spawns to `fork_turns=none`.
+## 8. Open
+
+- **D-A49-PROBE-FORK:** run (M256–M258): a PreToolUse guard on `collaborationspawn_agent` rewrites
+  `fork_turns` to `none` through `updatedInput`; it is wired with the trunk's Codex hooks.
 
 Not on the trunk's path:
 
-- `omitClaudeMd` also drops the auto-memory. A memory note that is a floor rule for this user, such
-  as forbidden keywords, no longer reaches those delegates. The local git hooks still catch it at
-  commit time.
-- The VS Code extension's attendance flag is not measured. M199 and M200 cover `-p` and the
-  terminal.
+- `omitClaudeMd` also drops the auto-memory, so a memory note that is a floor rule for this user,
+  such as forbidden keywords, no longer reaches those delegates. The local git hooks still catch it
+  at commit time.
+- The VS Code extension's attendance flag is not measured (M199 and M200 cover `-p` and the
+  terminal).
 - The raw evidence behind M246–M255 lives in the gitignored ergon (ADR 0023/D07), so the tree alone
   cannot recheck it.

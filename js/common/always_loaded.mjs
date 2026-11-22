@@ -170,13 +170,40 @@ export class Member {
 }
 
 /**
+ * The hook text of the two audiences the cap is not checked against: an unattended head and a delegate.
+ */
+export class OtherAudiences {
+  /**
+   * @param {Iterable<Member>} [unattended] the unattended head's hook text
+   * @param {Iterable<Member>} [delegate] the SubagentStart text a delegate carries
+   */
+  constructor(unattended = [], delegate = []) {
+    this.unattended = Object.freeze([...unattended]);
+    this.delegate = Object.freeze([...delegate]);
+    Object.freeze(this);
+  }
+}
+
+/**
+ * The bytes an unattended head and a delegate carry: `population`'s members plus each one's hook text.
+ * @param {Population} population
+ * @param {OtherAudiences} others
+ * @returns {[number, number]}
+ */
+export function audienceSizes(population, others) {
+  const chain = population.members.reduce((sum, member) => sum + member.size, 0);
+  const own = (/** @type {readonly Member[]} */ hooks) => hooks.reduce((sum, member) => sum + member.size, 0);
+  return [chain + own(others.unattended), chain + own(others.delegate)];
+}
+
+/**
  * The members of one scope, the hook text beside them, and their summed measurements.
  */
 export class Population {
   /**
    * @param {string} scope
    * @param {Iterable<Member>} members
-   * @param {Iterable<Member>} [hooks] the SessionStart hook text, counted in the totals and reported apart
+   * @param {Iterable<Member>} [hooks] the attended head's SessionStart hook text, counted in the totals and reported apart
    */
   constructor(scope, members, hooks = []) {
     this.scope = scope;
@@ -373,7 +400,8 @@ function _union(root, head, chain, selected) {
  * @param {string} agentsText
  * @param {string} root
  * @param {string[]} [selected]
- * @param {Member[]} [hooks] the SessionStart hook text (`hooks/session_start_text.mjs`), counted in both scopes
+ * @param {Member[]} [hooks] the attended head's hook text (`hooks/session_start_text.mjs`), counted in both
+ *   scopes and in the cap
  * @returns {Record<string, Population> | null}
  */
 export function populations(data, agentsText, root, selected = [], hooks = []) {
@@ -402,13 +430,21 @@ export function populations(data, agentsText, root, selected = [], hooks = []) {
  * The dynamic report — scope, actual over cap for both dimensions, then the hook bytes inside them.
  *
  * `hooks=` is a ceiling (every optional SessionStart line present); the finding that carries the
- * report names the code, so the message does not repeat it.
+ * report names the code, so the message does not repeat it. The numbers up to `hooks=` are the attended
+ * head's; `unattended-head=` and `delegate=` follow, in total bytes, when `others` carries those
+ * audiences' hook text ({@link audienceSizes}).
  * @param {Population} population
  * @param {Cap} cap
+ * @param {OtherAudiences} [others]
  * @returns {string}
  */
-export function report(population, cap) {
-  return `${population.scope}: lines=${population.lines}/${cap.lines} bytes=${population.size}/${cap.bytes} hooks=${population.hookSize}`;
+export function report(population, cap, others = new OtherAudiences()) {
+  let text = `${population.scope}: lines=${population.lines}/${cap.lines} bytes=${population.size}/${cap.bytes} hooks=${population.hookSize}`;
+  if (others.unattended.length > 0 || others.delegate.length > 0) {
+    const [unattended, delegate] = audienceSizes(population, others);
+    text += ` unattended-head=${unattended} delegate=${delegate}`;
+  }
+  return text;
 }
 
 /**

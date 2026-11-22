@@ -1,6 +1,7 @@
 # AGENTS.md
 
-Guidance for agents developing the akmon standard itself.
+Guidance for agents developing the akmon standard itself. **Archetype:** `agent-tooling`
+([ARCHETYPES.md](ARCHETYPES.md)): akmon builds what AI coding agents run with, for several harnesses.
 
 akmon develops on its own layer. The shipped guardrail and profiles are **imported, not
 restated** — they are the single owner of every rule they carry, the same requirement akmon
@@ -9,20 +10,26 @@ this file carries only what is true of akmon and of nothing else.
 
 <!-- akmon:imports -->
 @guardrails/_common.md
-@rules/collaboration.md
-@rules/templates.md
 @rules/code.md
 <!-- /akmon:imports -->
 @profiles/python.md
 @profiles/js.md
 @profiles/python-stdlib.md
+@profiles/agent-harness.md
+
+## Who reads what
+
+If an owner reads your replies and the owner-dialogue rules are not in your context, read
+[rules/collaboration.md](rules/collaboration.md) and [rules/templates.md](rules/templates.md);
+otherwise read [rules/unattended.md](rules/unattended.md). A hook delivers the right one at start.
 
 ## Roles
 
 [`roles/README.md`](roles/README.md) — `review`, `architect` and `engineer`, the modes of the
 development agent; [`agents/README.md`](agents/README.md) — the development, learning and release
 agents, the last two working in `learn` and `release`. Declaring the active role and restating it on every switch
-is the guardrail's rule; this file only says where the roles live.
+is the head session's rule ([rules/collaboration.md](rules/collaboration.md)); this file only says where
+the roles live.
 
 ## Delegation
 
@@ -82,9 +89,9 @@ the format of a note or a plan line and its place stay with the code.
   ([ADR 0023/D07](docs/adr/0023-project-documents-layout.md#d07--an-experiment-leaves-its-results-in-the-tree-and-its-materials-in-its-ergon)).
 - Harness and vendor facts that took an experiment — not what vendor docs state plainly — live in
   `meta/MEASUREMENTS.md` with the version they were verified on. Grep it before a probe, cite a
-  row that covers the version in use, and add a row after a new probe, replay or source reading. Claim
-  no Codex/Claude/Gemini capability parity without a live harness probe and a regression test for the
-  exact payload and enforcement behavior.
+  row that covers the version in use, and add a row after a new probe, replay or source reading. How a harness
+  fact is used — one interface, an adapter per harness, no claimed parity without a probe — is the
+  [agent-harness](profiles/agent-harness.md) profile.
 - **Commits** follow the guardrail § Commits & ownership, narrowed in one place: the owner owns
   merges into the default branch, tags, pushes, publishing and consumer pin bumps, and **the main
   checkout is the owner's** — an agent changes no history there, on any branch, even when asked to

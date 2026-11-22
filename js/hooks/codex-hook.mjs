@@ -32,10 +32,11 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { ACTORS, actorFromEnvironment, runBranchFromEnvironment } from "../common/access_matrix.mjs";
+import { isAttended } from "../common/audience.mjs";
 import { readThresholds, recordAndRemind, sessionEvent, statePath } from "../common/learning.mjs";
 import { claimDiagnosticMarker, markerKind, unidentifiedIdentity } from "../common/markers.mjs";
 import { recordAndReply } from "../common/work_style.mjs";
-import { dictGet, dictItem, pyIterate, pyPath } from "../common/pyvalue.mjs";
+import { dictGet, dictItem, pyIterate, pyPath, truthy } from "../common/pyvalue.mjs";
 import { fill } from "../common/jsondata.mjs";
 import {
   command,
@@ -66,8 +67,11 @@ import {
   privilegeEscalationGuardResult,
   reportUnclassifiedShellRoute,
   roleOnCodeResult,
+  sessionLayer,
   sessionStartResult,
   shellTool,
+  spawnForkResult,
+  subagentStartResult,
 } from "./hook_core.mjs";
 import { lazyHookData } from "./hook_data.mjs";
 
@@ -200,6 +204,11 @@ function _advisory(data, payload, decide) {
   if (kind === editTool(data) && unmeasuredPathSource(data, payload)) {
     _reportUnmeasuredPathSource(data, payload);
   }
+  if (truthy(dictGet(payload, "agent_id"))) {
+    // A child's tool events carry `agent_id` (M192). The role line and the go-ahead are the head's rules, so
+    // the advisories stay silent for a delegate, as the delegation nudge is (C28d).
+    return;
+  }
   const root = _payloadRoot(data, payload);
   for (const path of paths) {
     const result = decide(kind, path, sid, root);
@@ -217,14 +226,31 @@ function _advisory(data, payload, decide) {
  */
 function _sessionStart(data, payload) {
   const sid = sessionId(data, payload);
-  printResult(
-    data,
-    sessionStartResult(
-      data,
-      findProjectRoot(_startOf(data, payload)),
-      sid === unidentifiedIdentity(data.markers) ? null : sid,
-    ),
-  );
+  const root = findProjectRoot(_startOf(data, payload));
+  // The environment is read here, at the entry point, and passed down: the audience's layer rides on every
+  // `source` (`startup|resume|clear|compact`, M246), so a compacted session keeps it.
+  const layer = sessionLayer(data, root, isAttended(data.learning, process.env));
+  printResult(data, sessionStartResult(data, root, sid === unidentifiedIdentity(data.markers) ? null : sid, layer));
+}
+
+/**
+ * Keep a spawned child out of the head's history (M256, M257); a crash exits 1 and the spawn runs unchanged.
+ * @param {HookData} data
+ * @param {Payload} payload
+ * @returns {void}
+ */
+function _spawnGuard(data, payload) {
+  printResult(data, spawnForkResult(data, dictGet(payload, "tool_input")));
+}
+
+/**
+ * The unattended layer for a Codex child, which reaches the child and never the head (M250).
+ * @param {HookData} data
+ * @param {Payload} payload
+ * @returns {void}
+ */
+function _subagentStart(data, payload) {
+  printResult(data, subagentStartResult(data, findProjectRoot(_startOf(data, payload))));
 }
 
 /**
@@ -339,6 +365,33 @@ function _parseRoute(argv, routes) {
 /** The route whose crash an autonomous run answers with a deny (ADR 0031/D07, D-C203-GUARD-CRASH). */
 const COMMIT_GUARD_ROUTE = "git-commit-guard";
 
+/** The routes that take only the payload, by name. */
+const _PAYLOAD_ROUTES = new Map([
+  ["session-start", _sessionStart],
+  ["subagent-start", _subagentStart],
+  ["spawn-guard", _spawnGuard],
+  ["learning-reminder", _learningReminder],
+  ["work-style", _workStyle],
+]);
+
+/**
+ * The commit guard route: not wired by sync.py yet; C28(b) owns the exact live-probe, owner
+ * verification, then generated-wiring sequence for Bash+git behavior.
+ * @param {HookData} data
+ * @param {Payload} payload
+ * @returns {void}
+ */
+function _commitGuard(data, payload) {
+  const cmd = command(data, payload);
+  const actor = actorFromEnvironment(process.env);
+  const runBranch = runBranchFromEnvironment(process.env);
+  const start = cwd(data, payload) || null;
+  printResult(
+    data,
+    privilegeEscalationGuardResult(data, cmd, start) ?? gitCommitGuardResult(data, cmd, { actor, runBranch }),
+  );
+}
+
 /**
  * @param {HookData} data
  * @param {string} route
@@ -346,27 +399,15 @@ const COMMIT_GUARD_ROUTE = "git-commit-guard";
  * @returns {void}
  */
 function _dispatch(data, route, payload) {
-  if (route === "analysis-guard") {
+  const simple = _PAYLOAD_ROUTES.get(route);
+  if (simple !== undefined) {
+    simple(data, payload);
+  } else if (route === "analysis-guard") {
     _advisory(data, payload, (kind, path, sid, root) => analysisWriteResult(data, kind, path, sid, root));
   } else if (route === "role-on-code") {
     _advisory(data, payload, (kind, path, sid, root) => roleOnCodeResult(data, kind, path, sid, root));
-  } else if (route === "session-start") {
-    _sessionStart(data, payload);
-  } else if (route === "learning-reminder") {
-    _learningReminder(data, payload);
-  } else if (route === "work-style") {
-    _workStyle(data, payload);
   } else if (route === COMMIT_GUARD_ROUTE) {
-    // Intentionally not wired by sync.py yet; C28(b) owns the exact live-probe,
-    // owner verification, then generated-wiring sequence for Bash+git behavior.
-    const cmd = command(data, payload);
-    const actor = actorFromEnvironment(process.env);
-    const runBranch = runBranchFromEnvironment(process.env);
-    const start = cwd(data, payload) || null;
-    printResult(
-      data,
-      privilegeEscalationGuardResult(data, cmd, start) ?? gitCommitGuardResult(data, cmd, { actor, runBranch }),
-    );
+    _commitGuard(data, payload);
   }
 }
 

@@ -6,6 +6,7 @@
     "codex-hook.py",
     "git-commit-guard.py",
     "session-start-agent.py",
+    "subagent-start.py",
     "role-on-code.py",
     "analysis-guard.py",
     "settings-env-guard.py",
@@ -39,6 +40,7 @@
     "guardrails/_common.md",
     "rules/collaboration.md",
     "rules/templates.md",
+    "rules/unattended.md",
     "rules/code.md",
     "pipelines/pre-commit.md",
     "pipelines/code-flow.md",
@@ -78,6 +80,10 @@
       null
     ],
     "GEMINI.md": [
+      "AGENTS.md",
+      null
+    ],
+    "QWEN.md": [
       "AGENTS.md",
       null
     ],
@@ -255,6 +261,7 @@
     "codex-hook.mjs",
     "git-commit-guard.mjs",
     "session-start-agent.mjs",
+    "subagent-start.mjs",
     "role-on-code.mjs",
     "analysis-guard.mjs",
     "settings-env-guard.mjs",

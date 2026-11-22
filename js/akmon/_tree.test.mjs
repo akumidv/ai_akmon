@@ -10,6 +10,7 @@ import os from "node:os";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { tempDir } from "../common/temp_dir.test.mjs";
 import { embeddedTreeRoot } from "./_tree.mjs";
 
 const HERE = posix.dirname(fileURLToPath(import.meta.url));
@@ -22,7 +23,7 @@ test("the embedded tree is two levels above js/akmon, and holds the package.json
 });
 
 test("loaded through a link (a manager's node_modules/akmon) it still answers the real tree", () => {
-  const dir = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-tree-")));
+  const dir = tempDir("akmon-tree-");
   fs.mkdirSync(posix.join(dir, "node_modules"));
   fs.symlinkSync(TREE, posix.join(dir, "node_modules", "akmon"));
   const script = posix.join(dir, "probe.mjs");
@@ -35,5 +36,4 @@ test("loaded through a link (a manager's node_modules/akmon) it still answers th
     { status: result.status, stdout: result.stdout, stderr: result.stderr },
     { status: 0, stdout: TREE, stderr: "" },
   );
-  fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -6,12 +6,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import { createReport, nextReportPath, reportPrefix, safeName, taskError } from "./report_path.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
-const scratch = () => fs.mkdtempSync(path.join(os.tmpdir(), "report-path-test-"));
+const scratch = () => tempDir("report-path-test-");
 
 test("safeName and reportPrefix sanitise like a gate name and keep the task's case", () => {
   assert.equal(safeName("a b/ü"), "a-b-ü");

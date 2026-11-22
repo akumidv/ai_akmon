@@ -5,16 +5,16 @@
  * `runner.py --impl node --area tools`.
  */
 
-import { after, test } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { fill, read } from "../../common/jsondata.mjs";
+import { tempDir } from "../../common/temp_dir.test.mjs";
 import {
   ParkError,
   acquireLease,
@@ -137,25 +137,6 @@ const FULL_BODY = parkBody({
     ["question", "is the note enough?"],
     ["reader_sees", "facts only"],
   ],
-});
-
-/**
- * A fresh temporary folder, registered for removal when this file's tests end: a suite that leaves
- * its scratch on disk charges the machine for every run.
- * @param {string} prefix
- * @returns {string}
- */
-function tempDir(prefix) {
-  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
-  _tempDirs.push(dir);
-  return dir;
-}
-/** @type {string[]} */
-const _tempDirs = [];
-after(() => {
-  for (const dir of _tempDirs) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
 });
 
 // A directory that is no git repository and holds no project: the working directory the commands run in.

@@ -70,8 +70,12 @@ def _write_charters(root: Path, akmon_root: Path) -> None:
         charter.write_text(_init._charter(agent, spec, _AITNA, package_mode=True), encoding="utf-8")
 
 
-def shipped_population(akmon_root: Path) -> always_loaded.Population:
-    """What a package-mode consumer loads from akmon before it asks for anything."""
+def shipped_population(akmon_root: Path) -> tuple[always_loaded.Population, always_loaded.OtherAudiences]:
+    """What a package-mode consumer loads from akmon before it asks for anything, per audience.
+
+    The population is the attended head's, which the cap is checked against; the other audiences' hook
+    text comes beside it for the report.
+    """
     agents = _generated_block(akmon_root)
     with tempfile.TemporaryDirectory(prefix="akmon-always-loaded-") as tmp:
         root = Path(tmp)
@@ -87,19 +91,23 @@ def shipped_population(akmon_root: Path) -> always_loaded.Population:
         )
         if found is None:  # unreachable while the generator writes the heading it declares
             raise RuntimeError("the generated AGENTS.md carries no marked akmon block")
-        return found[always_loaded.shipped()]
+        others = always_loaded.OtherAudiences(
+            unattended=session_start_text.session_start_members(root, attended=False),
+            delegate=session_start_text.subagent_start_members(root),
+        )
+        return found[always_loaded.shipped()], others
 
 
 def check_always_loaded(akmon_root: Path) -> list[Finding]:
     """One Finding: error over the akmon-shipped cap, ok under it, the measurement either way."""
-    population = shipped_population(akmon_root)
+    population, others = shipped_population(akmon_root)
     cap = always_loaded.caps()[always_loaded.shipped()]
     over = always_loaded.over(population, cap)
     return [
         Finding(
             "error" if over else "ok",
             "caps.always-loaded",
-            always_loaded.report(population, cap),
+            always_loaded.report(population, cap, others),
             "AGENTS.md",
             _FIX_OVER if over else _FIX_OK,
         )

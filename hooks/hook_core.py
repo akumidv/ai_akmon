@@ -31,7 +31,7 @@ from typing import Any, NamedTuple, TypedDict, Unpack
 _TREE_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_TREE_ROOT))
 
-from common import access_matrix, harness_settings, jsondata, work_style  # noqa: E402
+from common import access_matrix, audience, harness_settings, jsondata, work_style  # noqa: E402
 from common.markers import (  # noqa: E402
     claim_diagnostic_marker,
     delegation_state_name,
@@ -113,6 +113,9 @@ class HookResult:
     #: thing the model is asked to do before it may end the turn again.
     decision: str | None = None
     reason: str | None = None
+    #: A PreToolUse rewrite of the tool call's input (Codex ``updatedInput``, M257): the WHOLE input the
+    #: tool will run with, since it replaces the received one rather than merging into it.
+    updated_input: dict[str, Any] | None = None
 
 
 def hook_failure_diagnostic(hook_name: str, exc: BaseException) -> str:
@@ -274,7 +277,7 @@ def report_unclassified_shell_route(session_id: str | None) -> None:
 
 
 # Planning / design docs — editing one may be an analysis-only turn that needs confirmation
-# first (see guardrails/_common.md § Analysis before mutation).
+# first (see rules/collaboration.md § Analysis before mutation — with the owner).
 def _planning_doc_segments(root: Path | None) -> tuple[str, ...]:
     aitna = _dev_name(root)
     return tuple(jsondata.fill(segment, {"aitna": aitna}) for segment in _hook_core_data()["planning_doc_segments"])
@@ -2079,19 +2082,46 @@ def _work_style_line(root: Path, session_id: str | None, start: Mapping[str, str
     return jsondata.fill(start["work_style_line"], {"style": found.style, "source": source})
 
 
-def session_start_context(root: Path, session_id: str | None, stale: str | None) -> str | None:
+def session_layer(root: Path, *, attended: bool) -> str:
+    """The layer the SessionStart hook appends for a session: the head layer when ``attended``, else the unattended one.
+
+    Read from the tree this hook executes from (:func:`akmon_runtime_root`), so it needs no materialized
+    copy and does not depend on an agent roster. A hook entry point derives ``attended`` from its
+    environment (:func:`common.audience.is_attended`) and passes it down (A49, D-A49-SELECTOR).
+    """
+    return audience.layer_text(akmon_runtime_root(root), attended=attended)
+
+
+def subagent_start_result(root: Path) -> HookResult:
+    """SubagentStart: the unattended layer, for the delegate that is starting (A49).
+
+    A delegate is read only by the head that launched it, so it gets the rules for working without an
+    owner (``rules/unattended.md``), not the owner-dialogue rules (M247, M250).
+
+    Runtime classification: operational
+    Rationale: it authors no rule; it delivers ``rules/unattended.md`` to the one reader the entry file
+    cannot reach selectively.
+    """
+    return HookResult(event_name="SubagentStart", additional_context=session_layer(root, attended=False))
+
+
+def session_start_context(
+    root: Path, session_id: str | None, stale: str | None, layer: str | None = None
+) -> str | None:
     """The text the SessionStart hook puts in the model's context, or ``None`` when it has nothing to say.
 
     The one owner of that text: :func:`session_start_result` and the always-loaded counter
     (ADR 0012 F18) both build it here. ``stale`` is the stale-guardrail line to append, or ``None``;
     the hook passes :func:`stale_guardrail_notice` and the counter :func:`stale_guardrail_ceiling`.
+    ``layer`` is the audience's layer (:func:`session_layer`), appended last and on every ``source``
+    because compaction drops what was given only at startup (M246); it does not depend on the roster.
     """
     dev = agent_names(aitna_root(root) / "agents", agent_definitions())
     desk = agent_names(root / "agents")
     if not dev and not desk:
         # A project with no agent charters still has to hear this one: it is about the rules
         # the harness just loaded, not about the roles it did not declare.
-        return stale
+        return _joined_context([stale, layer])
 
     # The line fragments are owned by hooks/hook_core.json (C102); the assembly — which lines
     # appear and in what order — stays here.
@@ -2121,11 +2151,22 @@ def session_start_context(root: Path, session_id: str | None, stale: str | None)
     lines.append(jsondata.fill(start["memory_line"], {"root_name": aitna_root_name(root)}))
     if stale is not None:
         lines.append(stale)
+    if layer is not None:
+        lines.append(layer)
     return "\n".join(lines)
 
 
-def session_start_result(root: Path, session_id: str | None = None) -> HookResult | None:
+def _joined_context(parts: Sequence[str | None]) -> str | None:
+    """The non-empty ``parts`` joined by newlines, or ``None`` when there is none."""
+    present = [part for part in parts if part is not None]
+    return "\n".join(present) if present else None
+
+
+def session_start_result(root: Path, session_id: str | None = None, layer: str | None = None) -> HookResult | None:
     """SessionStart guardrail: active-agent declaration reminder, plus a stale-materialization notice.
+
+    ``layer`` is the audience's layer (:func:`session_layer`), which the entry point passes on every
+    ``source``; without a roster it is all the hook has to say.
 
     One line states the work style in force for ``session_id`` and the level that set it (ADR 0031/D03);
     when the work-style data cannot be read or has the wrong shape, that line alone is left out.
@@ -2138,7 +2179,7 @@ def session_start_result(root: Path, session_id: str | None = None) -> HookResul
     second fact "operational" would read as "incidental", which it is not.
     """
     stale = stale_guardrail_notice(root)
-    context = session_start_context(root, session_id, stale)
+    context = session_start_context(root, session_id, stale, layer)
     if context is None:
         return None
     # Dual channel for the stale-guardrail line only (requirement 11): it asks the *owner* for a
@@ -2245,6 +2286,12 @@ def role_on_code_result(
     """PreToolUse guardrail: on the first code edit per session, remind to declare the engineer role.
 
     Policy ID: role.declaration
+
+    The role line is the head session's rule (``rules/collaboration.md`` § Role declaration): a delegate
+    declares no role and reports to the head (``rules/unattended.md``). The entry points therefore never
+    call this for a subagent's tool call (the payload carries ``agent_id``, C28d) — Claude Code shares the
+    ``session_id`` between the head and its subagents, so a delegate's first edit would otherwise also spend
+    the head's once-per-session marker.
     """
     if tool_name not in _edit_tool_kinds():
         return None
@@ -2278,6 +2325,10 @@ def analysis_write_result(
     """PreToolUse guardrail: on the first planning-doc edit per session, remind analysis-before-mutation.
 
     Policy ID: analysis.before-mutation
+
+    The reminder tells the writer to stop and ask the owner (``rules/collaboration.md`` § Analysis before
+    mutation — with the owner). A delegate's brief is its go-ahead (``rules/unattended.md``), so the entry
+    points never call this for a subagent's tool call (the payload carries ``agent_id``, C28d).
     """
     if tool_name not in _edit_tool_kinds():
         return None
@@ -2288,6 +2339,31 @@ def analysis_write_result(
         return None
 
     return HookResult(event_name="PreToolUse", additional_context=analysis_before_mutation_message())
+
+
+def spawn_fork_result(tool_input: object) -> HookResult | None:
+    """PreToolUse guard on a Codex spawn: the child starts without the parent's history, or the call is left alone.
+
+    A child forked with ``fork_turns="all"`` — the default when the key is absent (M256) — inherits the
+    parent's history, and with it the head-only owner-dialogue layer the SessionStart hook gave the head
+    (M250, M257); the child already gets the unattended layer from SubagentStart. So a spawn whose
+    ``fork_turns`` is missing or anything but ``none`` is rewritten to ``none`` through ``updatedInput``,
+    which must carry every received field — the opaque ``message`` included — and needs
+    ``permissionDecision: "allow"`` (M257). A spawn that already says ``none``, and any input that is not
+    an object, is left untouched: no output.
+
+    Runtime classification: operational
+    Rationale: it authors no rule; it keeps a delegate from inheriting the head layer that
+    ``rules/unattended.md`` says does not apply to it.
+    """
+    guard = _hook_core_data()["spawn_guard"]
+    if not isinstance(tool_input, dict) or tool_input.get(guard["fork_key"]) == guard["isolated"]:
+        return None
+    return HookResult(
+        event_name="PreToolUse",
+        permission_decision="allow",
+        updated_input={**tool_input, guard["fork_key"]: guard["isolated"]},
+    )
 
 
 # Delegation nudge — the routing rule (guardrails/_common.md § Route by task kind + the

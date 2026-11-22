@@ -1,0 +1,24 @@
+# SubagentStart hands the unattended layer to the delegate that is starting, whatever the session's
+# attendance (A49; M247).
+id = "hooks/subagent-start"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:subagent-start"]
+
+[fixture]
+attach = "native"
+
+[run]
+script = "subagent-start"
+
+[run.payload]
+hook_event_name = "SubagentStart"
+session_id = "sess-sa-start"
+agent_id = "agent-1"
+agent_type = "k_explorer"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"SubagentStart\", \"additionalContext\": \"# Rules: working without the owner\\n\\nCorpus stand-in for the unattended layer: what the session-start hook delivers to a session no owner attends, and what the subagent-start hook delivers to a delegate.\"}}\n"

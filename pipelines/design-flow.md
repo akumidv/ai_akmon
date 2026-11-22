@@ -138,7 +138,7 @@ design records.
 ## Decision requests
 
 How a request to the owner is coded, written, closed in the `Needed from you` block and answered is
-[rules/collaboration.md](../rules/collaboration.md), loaded at session start for every role; its
+[rules/collaboration.md](../rules/collaboration.md), delivered at session start to the head session; its
 shapes are in [rules/templates.md](../rules/templates.md). This section keeps only how a request is
 recorded.
 

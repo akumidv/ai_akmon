@@ -119,6 +119,7 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "guardrails/_common.md",
         "rules/collaboration.md",
         "rules/templates.md",
+        "rules/unattended.md",
         "rules/code.md",
         "pipelines/pre-commit.md",
         "pipelines/code-flow.md",
@@ -130,6 +131,8 @@ def _make_fixture(root: Path, akmon_root: Path) -> None:
         "common/access_matrix.py",
         "common/always_loaded.json",
         "common/always_loaded.py",
+        "common/audience.json",
+        "common/audience.py",
         "common/codex_hooks.json",
         "common/codex_hooks.py",
         "common/findings.json",
@@ -363,6 +366,7 @@ def _installed_wheel_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[st
         "_aitna/.akmon/rules/code.md",
         "_aitna/.akmon/rules/collaboration.md",
         "_aitna/.akmon/rules/templates.md",
+        "_aitna/.akmon/rules/unattended.md",
     ]:
         raise RuntimeError(f"package mode materialized more than the imported rules: {materialized}")
 
@@ -608,6 +612,7 @@ def _installed_npm_smoke(akmon_root: Path, tmp_root: Path, verify_env: dict[str,
         "_aitna/.akmon/rules/code.md",
         "_aitna/.akmon/rules/collaboration.md",
         "_aitna/.akmon/rules/templates.md",
+        "_aitna/.akmon/rules/unattended.md",
     ]:
         raise RuntimeError(f"the Node attach materialized more than the imported rules: {materialized}")
     wiring = [command for _, _, command in _generated_hook_commands(fixture)]

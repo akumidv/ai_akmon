@@ -183,13 +183,34 @@ def test_the_report_is_dynamic_in_every_field():
     assert al.report(base, al.Cap(lines=10, bytes=101)) == "consumer-total: lines=2/10 bytes=6/101 hooks=0"
 
 
+def test_the_other_audiences_are_reported_beside_the_attended_head_and_never_summed_into_the_cap_totals():
+    # A49: the cap is the attended head's; an unattended head and a delegate carry the same chain plus their own hooks.
+    cap = al.Cap(lines=100, bytes=1000)
+    chain = al.Member("m", "ab\ncd\n")
+    population = al.Population(al.consumer(), (chain,), (al.Member("hook: head", "one\ntwo\n"),))
+    unattended = (al.Member("hook: head", "x\n"),)
+    delegate = (al.Member("hook: subagent-start", "abc\n"),)
+    others = al.OtherAudiences(unattended, delegate)
+    assert population.size == 6 + 8  # the cap's total is the attended head's alone
+    assert al.audience_sizes(population, others) == (6 + 2, 6 + 4)
+    assert al.report(population, cap, others) == (
+        "consumer-total: lines=4/100 bytes=14/1000 hooks=8 unattended-head=8 delegate=10"
+    )
+    # either other audience alone is enough to report; neither leaves the report as it was
+    assert al.report(population, cap, al.OtherAudiences(delegate=delegate)).endswith(" unattended-head=6 delegate=10")
+    assert al.report(population, cap, al.OtherAudiences(unattended=unattended)).endswith(
+        " unattended-head=8 delegate=6"
+    )
+    assert al.report(population, cap) == "consumer-total: lines=4/100 bytes=14/1000 hooks=8"
+
+
 # --------------------------------------------------------------------------------------
 # C56 — the akmon-shipped scope: self_ci's error leg, measured on akmon's own tree
 # --------------------------------------------------------------------------------------
 
 
 def test_the_shipped_population_is_the_generated_block_its_chain_and_the_largest_profile():
-    population = shipped.shipped_population(_AKMON)
+    population, _others = shipped.shipped_population(_AKMON)
     names = [member.name for member in population.members]
     assert population.scope == al.shipped()
     assert names[0] == "AGENTS.md (akmon block)"

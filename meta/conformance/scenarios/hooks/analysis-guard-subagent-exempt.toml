@@ -1,0 +1,23 @@
+# A call from inside a subagent (agent_id present) is exempt from the analysis-before-mutation reminder
+# (A49, C28d): a delegate's brief is its go-ahead.
+id = "hooks/analysis-guard-subagent-exempt"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:analysis-guard"]
+
+[run]
+script = "analysis-guard"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Edit"
+session_id = "sess-ag-sub"
+agent_id = "agent-1"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { file_path = "{{root}}/_aitna/TASKS.md" }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

@@ -21,6 +21,12 @@ import { lazyHookData } from "./hook_data.mjs";
  */
 function decide(data) {
   const payload = loadPayload();
+  if (truthy(dictGet(payload, "agent_id"))) {
+    // A delegate (`agent_id` is present only inside a subagent, C28d) takes the head layer's rules for
+    // neither role nor go-ahead — its brief and `rules/unattended.md` stand in for them — and it shares the
+    // head's `session_id`, so it must not spend the head's once-per-session marker.
+    return null;
+  }
   const rawInput = dictGet(payload, "tool_input");
   const toolInput = truthy(rawInput) ? rawInput : {};
   const rawName = dictGet(payload, "tool_name");

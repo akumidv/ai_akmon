@@ -10,10 +10,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { tempDir } from "../common/temp_dir.test.mjs";
 import { main, moveCommand, newestRelease, pinSpec, plan, readUpdateData } from "./_update.mjs";
 import { readInitData } from "./_init.mjs";
 
@@ -37,7 +37,7 @@ const RECORD = 'mount = "package"\necosystem = "node"\nakmon_version = "0.4.0"\n
  * @returns {string}
  */
 function project(files = {}, { linked = true } = {}) {
-  const root = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-update-")));
+  const root = tempDir("akmon-update-");
   /** @type {Record<string, string | null>} */
   const all = {
     "package.json": JSON.stringify({ name: "demo", devDependencies: { akmon: "0.4.0" } }),
@@ -191,7 +191,6 @@ test("the pin moves with the detected manager, then the pinned CLI runs init, sy
     assert.deepEqual(stand.asked, []);
     assert.ok(result.stdout.startsWith(`akmon update: ${root} · mount mode package · 0.4.0 → v0.5.0\n`));
     assert.ok(result.stdout.includes(`akmon update: moving the pin: ${command.join(" ")}\n`));
-    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -202,7 +201,6 @@ test("an older --ref is an announced rollback and moves the pin back", () => {
   assert.equal(result.status, 0);
   assert.ok(result.stdout.includes("rolling back 0.4.0 → 0.3.0, as --ref asks"));
   assert.deepEqual(stand.ran[0], ["npm", "install", "-D", "-E", "akmon@0.3.0"]);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("without --ref the target is the newest final release the registry lists, asked in the project", () => {
@@ -219,7 +217,6 @@ test("without --ref the target is the newest final release the registry lists, a
   assert.ok(realign.stdout.includes("already at 0.4.0 — realigning only"));
   assert.deepEqual(launched(lone.ran), ["init", "sync", "verify"]);
   assert.equal(lone.ran.length, 3);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("without --ref the pin never moves back: a record past the newest release is realigned in place", () => {
@@ -229,7 +226,6 @@ test("without --ref the pin never moves back: a record past the newest release i
   assert.equal(result.status, 0);
   assert.ok(result.stdout.includes("0.6.0 is past the newest release 0.5.0 — the pin stays; pass --ref to move it"));
   assert.deepEqual(launched(stand.ran), ["init", "sync", "verify"]);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a registry that cannot be asked, or lists no release, is refused naming --ref", () => {
@@ -248,7 +244,6 @@ test("a registry that cannot be asked, or lists no release, is refused naming --
     });
     assert.deepEqual(stand.ran, []);
   }
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a manager akmon does not drive gets the command printed, and nothing runs", () => {
@@ -264,7 +259,6 @@ test("a manager akmon does not drive gets the command printed, and nothing runs"
       "akmon@0.5.0 with it and install, then run `akmon init`; with npm:\n    npm install -D -E akmon@0.5.0\n",
   );
   assert.deepEqual(stand.ran, []);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a manager that is not on PATH gets its command printed, and nothing runs", () => {
@@ -278,7 +272,6 @@ test("a manager that is not on PATH gets its command printed, and nothing runs",
       "Run it where it is, then run `akmon init`:\n    pnpm add -D -E akmon@0.5.0\n",
   );
   assert.deepEqual(stand.ran, []);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a failed move stops before init", () => {
@@ -288,7 +281,6 @@ test("a failed move stops before init", () => {
   assert.equal(result.status, 2);
   assert.equal(result.stderr, "akmon update: `npm install -D -E akmon@0.5.0` failed (1) — see its output above\n");
   assert.equal(stand.ran.length, 1);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a pin outside devDependencies is refused before the move", () => {
@@ -303,7 +295,6 @@ test("a pin outside devDependencies is refused before the move", () => {
     assert.equal(result.status, 2);
     assert.equal(result.stderr, `akmon update: ${data.node_pin_not_dev.replace("{{status}}", status)}\n`);
     assert.deepEqual(stand.ran, []);
-    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -328,9 +319,7 @@ test("no record is the shared missing-record refusal; a record the Python serves
     assert.ok(result.stderr.includes(found), result.stderr);
     assert.equal(result.stdout, "");
     assert.deepEqual(stand.ran, []);
-    fs.rmSync(root, { recursive: true, force: true });
   }
-  fs.rmSync(bare, { recursive: true, force: true });
 });
 
 test("a project without its installed CLI is told how to install it", () => {
@@ -343,7 +332,6 @@ test("a project without its installed CLI is told how to install it", () => {
     "akmon update: node_modules/akmon/js/akmon/cli.mjs does not exist — the Node package mode runs akmon from the " +
       "project's own node_modules; `npm install` installs it\n",
   );
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("an unusable --aitna-root is refused with the init text", () => {
@@ -354,7 +342,6 @@ test("an unusable --aitna-root is refused with the init text", () => {
     stdout: "",
     stderr: "akmon update: --aitna-root must be relative to the project root and stay inside it: '../out'\n",
   });
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a refused update leaves the dev-root declaration as it was", () => {
@@ -367,7 +354,6 @@ test("a refused update leaves the dev-root declaration as it was", () => {
     const result = run(["--aitna-root", "dev", "--ref", "v0.4.0", "--project-root", root], deps());
     assert.equal(result.status, 2, result.stdout + result.stderr);
     assert.equal(fs.existsSync(pointer) ? fs.readFileSync(pointer, "utf8") : null, before);
-    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -395,7 +381,6 @@ test("a failed init or check is the exit code, and the closing steps name what i
     ),
     verifyResult.stdout,
   );
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a realign without a move leaves only the review", () => {
@@ -408,7 +393,6 @@ test("a realign without a move leaves only the review", () => {
         "that changed — the commit is the owner's (D5)\n",
     ),
   );
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 // -- the real process --------------------------------------------------------------------------
@@ -451,7 +435,7 @@ test("the real process realigns a Node project through its installed CLI, keepin
     "_aitna/.akmon.toml": RECORD.replaceAll("0.4.0", version) + none,
     "AGENTS.md": "# demo\n",
   });
-  const scratch = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-update-path-")));
+  const scratch = tempDir("akmon-update-path-");
   const env = { ...process.env };
   env.PATH = pathWithout("codex", scratch);
   const result = spawnSync(process.execPath, [CLI, "update", "--ref", version, "--project-root", root], {
@@ -469,8 +453,6 @@ test("the real process realigns a Node project through its installed CLI, keepin
   assert.ok(result.stdout.includes("[check] already names this project's checks — left untouched\n"), result.stdout);
   assert.ok(fs.readFileSync(posix.join(root, "_aitna", ".akmon.toml"), "utf8").endsWith(none));
   assert.ok(!fs.existsSync(posix.join(root, ".oxlintrc.json")));
-  fs.rmSync(scratch, { recursive: true, force: true });
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 // -- the mounted modes (C129) ------------------------------------------------------------------
@@ -498,7 +480,6 @@ test("a mounted record reads its target from the tags of --repo, as the Python d
   assert.ok(
     unreachable.stderr.includes("cannot discover the latest release tag from 'https://github.com/akumidv/ai_akmon'"),
   );
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("subtree realigns in place with this CLI's init at the recorded ref, then checks on the mount's CLI", () => {
@@ -513,7 +494,6 @@ test("subtree realigns in place with this CLI's init at the recorded ref, then c
     [process.execPath, mountCli, "verify", "--strict", "--project-root", root],
   ]);
   assert.ok(result.stdout.includes("review `git diff` and stage `_aitna/akmon` with the generated files that changed"));
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("vendored prints the npx command of the target release, runs nothing; this CLI's own release runs init", () => {
@@ -537,7 +517,6 @@ test("vendored prints the npx command of the target release, runs nothing; this 
   const unfetchable = run(["--ref", "0.1.0-3-gabc1234", "--project-root", root], deps());
   assert.equal(unfetchable.status, 2);
   assert.ok(unfetchable.stderr.includes("is not a release this can fetch"), unfetchable.stderr);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("submodule fetches the tags into the mount from --repo, then this CLI's init moves the pin", () => {
@@ -556,5 +535,4 @@ test("submodule fetches the tags into the mount from --repo, then this CLI's ini
     failed.stderr,
     "akmon update: `git fetch --tags` failed in _aitna/akmon — it needs git and network access to /srv/akmon\n",
   );
-  fs.rmSync(root, { recursive: true, force: true });
 });

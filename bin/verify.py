@@ -758,7 +758,8 @@ class Verifier:
     def _check_always_loaded(self, agents_text: str) -> None:
         """ADR 0012 F18, consumer-total scope: warn over the cap, report the measurement every run.
 
-        The measurement includes the SessionStart hook text, as a ceiling (``hooks=`` in the message).
+        The measurement includes the SessionStart hook text, as a ceiling (``hooks=`` in the message), and
+        reports the unattended head and a delegate beside the attended head the cap is checked against.
 
         The consumer owns most of this population, so the finding stays ``warn``; ``--strict``
         turns it into a non-zero exit through the shared exit policy, not by changing severity.
@@ -769,7 +770,11 @@ class Verifier:
         if found is None:
             return  # no marked akmon block: check_agents_md already reports the missing anchor
         population, cap = found[always_loaded.consumer()], always_loaded.caps()[always_loaded.consumer()]
-        message = always_loaded.report(population, cap)
+        others = always_loaded.OtherAudiences(
+            unattended=session_start_text.session_start_members(self.root, attended=False),
+            delegate=session_start_text.subagent_start_members(self.root),
+        )
+        message = always_loaded.report(population, cap, others)
         if always_loaded.over(population, cap):
             self.warn(
                 "caps.always-loaded",

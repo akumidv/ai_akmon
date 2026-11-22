@@ -1286,7 +1286,7 @@ def test_every_wired_claude_entry_reports_a_crash_to_the_owner_and_exits_zero(tm
     # One stderr line with the hook and the class, the owner's notice as the one stdout document
     # (M69: shown as a notice, never passed to the model), exit 0 (M70: an exit 1 is silent).
     files, _ = _wired_entry_points(tmp_path)
-    assert len(files) == 11
+    assert len(files) == 12
     for filename in files:
         hook = _claude_hook(filename)
         monkeypatch.setattr(hook, "load_payload", _seeded_crash)
@@ -1303,7 +1303,15 @@ def test_every_wired_codex_route_reports_a_crash_as_failed(tmp_path, monkeypatch
     # Exit 1 with nothing on stdout: Codex shows the hook `Failed` and the action goes ahead
     # (M68, M71); an exit 0 would read `Completed` and hide the crash.
     _, routes = _wired_entry_points(tmp_path)
-    assert routes == ["analysis-guard", "learning-reminder", "role-on-code", "session-start", "work-style"]
+    assert routes == [
+        "analysis-guard",
+        "learning-reminder",
+        "role-on-code",
+        "session-start",
+        "spawn-guard",
+        "subagent-start",
+        "work-style",
+    ]
     codex_hook = _codex_hook()
     monkeypatch.setattr(codex_hook, "load_payload", _seeded_crash)
     for route in routes:
@@ -1528,6 +1536,9 @@ def test_stale_guardrail_notice_reaches_both_vendor_wirings(monkeypatch, tmp_pat
     tree = tmp_path / "installed"
     (tree / "guardrails").mkdir(parents=True)
     (tree / "guardrails" / "_common.md").write_text("# Common\n\nnew rule\n", encoding="utf-8")
+    for layer_file in ("collaboration", "templates", "unattended"):  # the audience's layer is read from the tree
+        (tree / "rules").mkdir(exist_ok=True)
+        (tree / "rules" / f"{layer_file}.md").write_text(f"# {layer_file}\n", encoding="utf-8")
     monkeypatch.setattr(hook_core, "akmon_runtime_root", lambda project_root: tree)
 
     root = _codex_project(tmp_path)
@@ -1847,6 +1858,8 @@ def test_codex_hook_json_holds_the_routes_and_diagnostic_templates():
         "analysis-guard",
         "role-on-code",
         "session-start",
+        "subagent-start",
+        "spawn-guard",
         "learning-reminder",
         "work-style",
         "git-commit-guard",

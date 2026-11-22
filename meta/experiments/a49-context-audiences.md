@@ -1,10 +1,10 @@
 # A49 — carriers for a starting context split by audience
 
 A results document for probes P1–P5 of task A49 ([design](../../docs/design/context-audiences.md)).
-The facts are rows M246–M255 of [MEASUREMENTS](../MEASUREMENTS.md); this note holds what they
+The facts are rows M246–M258 of [MEASUREMENTS](../MEASUREMENTS.md); this note holds what they
 answer and what they leave open. Runners, hook scripts, trimmed transcripts and per-run outputs are in
 the ergon, `meta/.ergon/A49-startup-context/materials/` (`p1-p3-claude/`, `p2-adherence/`,
-`p4-codex/`, `p5-qwen/`).
+`p4-codex/`, `p5-qwen/`, `p6-codex-fork/`).
 
 **Question:** can the owner-dialogue rules reach the head session only, an unattended layer reach
 delegates, and the floor reach everyone, on Claude Code, Codex and Qwen Code?
@@ -38,6 +38,14 @@ runs, judged from transcripts, rollouts and logged requests rather than from the
   consumer's hooks get trusted is not measured: folder trust, stored approvals or system-level
   settings. Today the Qwen head gets the dialogue rules through the expanded imports, so the design
   keeps a Qwen head carrier until that route is measured.
+
+## P6 — steering a Codex spawn away from the parent's history
+
+A PreToolUse hook on `collaborationspawn_agent` sees `fork_turns` (M256) and can rewrite it to
+`none` through `updatedInput` with `permissionDecision: "allow"`, carrying the whole received input
+(M257). The child then lacks the head layer and keeps its own `AGENTS.md` and SubagentStart text. A
+deny with a retry reason works only when the prompt does not say otherwise, and `additionalContext`
+comes too late (M258). So the Codex delegate split holds on the default path too.
 
 ## Not established
 

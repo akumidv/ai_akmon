@@ -195,3 +195,7 @@ Conventions ([design-flow](../../pipelines/design-flow.md) · [tasks](../../pipe
   set up only on request; one Chrome per project, a foreign one only through `attach`; the skill reads
   through the interface with no direct requests; the developer's session's tool, not an autonomous run's;
   recording scope is the user's, a secret redacted at capture. Extends 0022/D07 and 0031/D07.
+- [0033 — The starting context by audience: the head, the delegate, the autonomous run](0033-starting-context-by-audience.md)
+  — accepted D01–D06 (task A49): a floor for every agent, the owner-dialogue rules for the session the
+  owner attends, `rules/unattended.md` for delegates and autonomous runs, each delivered by hooks per
+  harness, one version where a harness cannot separate; amends 0018/D02 and 0012.

@@ -8,7 +8,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 
 import {
@@ -28,12 +27,13 @@ import {
   resolveProjectRoot,
   validatedDevRootName,
 } from "./project_root.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 function tmpdir() {
   // The twin dereferences symlinks, so the paths the assertions compare against must be the
   // physical ones: a temp root reached through a link (macOS `/var` → `/private/var`) would
   // never equal what `findProjectRoot` answers.
-  return fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-project-root-")));
+  return tempDir("akmon-project-root-");
 }
 
 /**
@@ -60,33 +60,25 @@ function git(cwd, args) {
 test("outside a repository the main checkout is the project root itself, and no root answers none", () => {
   assert.equal(gitCommonRoot(null), null);
   const root = tmpdir();
-  try {
-    assert.equal(gitCommonRoot(root), root);
-    assert.equal(ergonRoot(root), `${root}/_aitna/.ergon`);
-    // a directory that is not there is no repository either
-    assert.equal(gitCommonRoot(`${root}/missing`), `${root}/missing`);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  assert.equal(gitCommonRoot(root), root);
+  assert.equal(ergonRoot(root), `${root}/_aitna/.ergon`);
+  // a directory that is not there is no repository either
+  assert.equal(gitCommonRoot(`${root}/missing`), `${root}/missing`);
 });
 
 test("a linked worktree resolves its kits to the main checkout (ADR 0028 D11)", { skip: !gitAvailable() }, () => {
   const main = tmpdir();
-  try {
-    fs.writeFileSync(posix.join(main, "AGENTS.md"), "# agents\n");
-    git(main, ["init", "-q"]);
-    const linked = posix.join(main, ".worktrees", "C1-demo.1");
-    git(main, ["worktree", "add", "-q", "--orphan", "-b", "feat", linked]);
-    assert.equal(gitCommonRoot(main), main);
-    assert.equal(gitCommonRoot(linked), main);
-    assert.equal(ergonRoot(main), `${main}/_aitna/.ergon`);
-    assert.equal(ergonRoot(linked), `${main}/_aitna/.ergon`);
-    // the dev root is the main checkout's: its declaration is the one that counts
-    fs.writeFileSync(posix.join(main, ".aitna-root"), "tools/ai\n");
-    assert.equal(ergonRoot(main), `${main}/tools/ai/.ergon`);
-  } finally {
-    fs.rmSync(main, { recursive: true, force: true });
-  }
+  fs.writeFileSync(posix.join(main, "AGENTS.md"), "# agents\n");
+  git(main, ["init", "-q"]);
+  const linked = posix.join(main, ".worktrees", "C1-demo.1");
+  git(main, ["worktree", "add", "-q", "--orphan", "-b", "feat", linked]);
+  assert.equal(gitCommonRoot(main), main);
+  assert.equal(gitCommonRoot(linked), main);
+  assert.equal(ergonRoot(main), `${main}/_aitna/.ergon`);
+  assert.equal(ergonRoot(linked), `${main}/_aitna/.ergon`);
+  // the dev root is the main checkout's: its declaration is the one that counts
+  fs.writeFileSync(posix.join(main, ".aitna-root"), "tools/ai\n");
+  assert.equal(ergonRoot(main), `${main}/tools/ai/.ergon`);
 });
 
 test(
@@ -94,72 +86,55 @@ test(
   { skip: !gitAvailable() },
   () => {
     const main = tmpdir();
-    try {
-      git(main, ["init", "-q"]);
-      const nested = posix.join(main, "pkg");
-      fs.mkdirSync(nested);
-      fs.writeFileSync(posix.join(nested, "AGENTS.md"), "# agents\n");
-      // the repository root has no AGENTS.md and no .aitna-root: it is not a project root, so the answer stays put
-      assert.equal(gitCommonRoot(nested), nested);
-      assert.equal(ergonRoot(nested), `${nested}/_aitna/.ergon`);
-    } finally {
-      fs.rmSync(main, { recursive: true, force: true });
-    }
+    git(main, ["init", "-q"]);
+    const nested = posix.join(main, "pkg");
+    fs.mkdirSync(nested);
+    fs.writeFileSync(posix.join(nested, "AGENTS.md"), "# agents\n");
+    // the repository root has no AGENTS.md and no .aitna-root: it is not a project root, so the answer stays put
+    assert.equal(gitCommonRoot(nested), nested);
+    assert.equal(ergonRoot(nested), `${nested}/_aitna/.ergon`);
   },
 );
 
 test("a project in a repository subfolder keeps its own dev root", { skip: !gitAvailable() }, () => {
   const top = tmpdir();
-  try {
-    const proj = posix.join(top, "proj");
-    fs.mkdirSync(proj);
-    fs.writeFileSync(posix.join(top, "AGENTS.md"), "# agents\n");
-    fs.writeFileSync(posix.join(proj, "AGENTS.md"), "# agents\n");
-    fs.writeFileSync(posix.join(proj, ".aitna-root"), "_aitna\n");
-    git(top, ["init", "-q"]);
-    assert.equal(gitCommonRoot(proj), proj);
-    assert.equal(ergonRoot(proj), `${proj}/_aitna/.ergon`);
-    assert.equal(ergonRoot(top), `${top}/_aitna/.ergon`);
-  } finally {
-    fs.rmSync(top, { recursive: true, force: true });
-  }
+  const proj = posix.join(top, "proj");
+  fs.mkdirSync(proj);
+  fs.writeFileSync(posix.join(top, "AGENTS.md"), "# agents\n");
+  fs.writeFileSync(posix.join(proj, "AGENTS.md"), "# agents\n");
+  fs.writeFileSync(posix.join(proj, ".aitna-root"), "_aitna\n");
+  git(top, ["init", "-q"]);
+  assert.equal(gitCommonRoot(proj), proj);
+  assert.equal(ergonRoot(proj), `${proj}/_aitna/.ergon`);
+  assert.equal(ergonRoot(top), `${top}/_aitna/.ergon`);
 });
 
 test("a linked worktree of a subfolder project uses the main checkout's subfolder", { skip: !gitAvailable() }, () => {
   const main = tmpdir();
   const linked = tmpdir();
-  try {
-    const proj = posix.join(main, "proj");
-    fs.mkdirSync(proj);
-    fs.writeFileSync(posix.join(proj, "AGENTS.md"), "# agents\n");
-    git(main, ["init", "-q"]);
-    git(main, ["add", "proj/AGENTS.md"]);
-    git(main, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"]);
-    fs.rmSync(linked, { recursive: true });
-    git(main, ["worktree", "add", "-q", "-b", "job-1", linked]);
-    assert.equal(gitCommonRoot(posix.join(linked, "proj")), proj);
-    assert.equal(ergonRoot(posix.join(linked, "proj")), `${proj}/_aitna/.ergon`);
-  } finally {
-    fs.rmSync(main, { recursive: true, force: true });
-    fs.rmSync(linked, { recursive: true, force: true });
-  }
+  const proj = posix.join(main, "proj");
+  fs.mkdirSync(proj);
+  fs.writeFileSync(posix.join(proj, "AGENTS.md"), "# agents\n");
+  git(main, ["init", "-q"]);
+  git(main, ["add", "proj/AGENTS.md"]);
+  git(main, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"]);
+  fs.rmSync(linked, { recursive: true });
+  git(main, ["worktree", "add", "-q", "-b", "job-1", linked]);
+  assert.equal(gitCommonRoot(posix.join(linked, "proj")), proj);
+  assert.equal(ergonRoot(posix.join(linked, "proj")), `${proj}/_aitna/.ergon`);
 });
 
 test("the common directory is probed on every call and remembered by nobody", { skip: !gitAvailable() }, () => {
   const main = tmpdir();
-  try {
-    fs.writeFileSync(posix.join(main, "AGENTS.md"), "# agents\n");
-    git(main, ["init", "-q"]);
-    const linked = posix.join(main, ".worktrees", "C1-demo.1");
-    git(main, ["worktree", "add", "-q", "--orphan", "-b", "feat", linked]);
-    assert.equal(gitCommonRoot(linked), main);
-    // no module-level memo: once the link file is gone the folder is no longer a worktree, and the
-    // answer of this call is the folder itself (ADR 0029: a caller that asks repeatedly passes it down)
-    fs.rmSync(posix.join(linked, ".git"));
-    assert.equal(gitCommonRoot(linked), linked);
-  } finally {
-    fs.rmSync(main, { recursive: true, force: true });
-  }
+  fs.writeFileSync(posix.join(main, "AGENTS.md"), "# agents\n");
+  git(main, ["init", "-q"]);
+  const linked = posix.join(main, ".worktrees", "C1-demo.1");
+  git(main, ["worktree", "add", "-q", "--orphan", "-b", "feat", linked]);
+  assert.equal(gitCommonRoot(linked), main);
+  // no module-level memo: once the link file is gone the folder is no longer a worktree, and the
+  // answer of this call is the folder itself (ADR 0029: a caller that asks repeatedly passes it down)
+  fs.rmSync(posix.join(linked, ".git"));
+  assert.equal(gitCommonRoot(linked), linked);
 });
 
 test("the default dev-layer name is _aitna, and none found answers it too", () => {
@@ -171,7 +146,6 @@ test("the default dev-layer name is _aitna, and none found answers it too", () =
   assert.equal(aitnaRootName(root), "_aitna");
   assert.equal(aitnaRoot(root), `${root}/_aitna`);
   assert.equal(akmonMount(root), `${root}/_aitna/akmon`);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("the dotted layer folders sit under the dev root, and none found answers the default-name path (ADR 0028 D01)", () => {
@@ -181,36 +155,28 @@ test("the dotted layer folders sit under the dev root, and none found answers th
   assert.equal(ergonRoot(null), "_aitna/.ergon");
   assert.equal(legacyLocalRoot(null), "_aitna/local");
   const root = tmpdir();
-  try {
-    assert.equal(localRoot(root), `${root}/_aitna/.local`);
-    assert.equal(ergonRoot(root), `${root}/_aitna/.ergon`);
-    assert.equal(legacyLocalRoot(root), `${root}/_aitna/local`);
-    fs.writeFileSync(posix.join(root, ".aitna-root"), "tools/ai\n");
-    assert.equal(localRoot(root), `${root}/tools/ai/.local`);
-    assert.equal(ergonRoot(root), `${root}/tools/ai/.ergon`);
-    assert.equal(legacyLocalRoot(root), `${root}/tools/ai/local`);
-    // computed, never a claim that the folder exists
-    assert.equal(fs.existsSync(localRoot(root)), false);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  assert.equal(localRoot(root), `${root}/_aitna/.local`);
+  assert.equal(ergonRoot(root), `${root}/_aitna/.ergon`);
+  assert.equal(legacyLocalRoot(root), `${root}/_aitna/local`);
+  fs.writeFileSync(posix.join(root, ".aitna-root"), "tools/ai\n");
+  assert.equal(localRoot(root), `${root}/tools/ai/.local`);
+  assert.equal(ergonRoot(root), `${root}/tools/ai/.ergon`);
+  assert.equal(legacyLocalRoot(root), `${root}/tools/ai/local`);
+  // computed, never a claim that the folder exists
+  assert.equal(fs.existsSync(localRoot(root)), false);
 });
 
 test(".aitna-root relocates the dev layer; slashes strip; a refused value raises", () => {
   const root = tmpdir();
-  try {
-    fs.writeFileSync(posix.join(root, ".aitna-root"), "tools/ai\n");
-    assert.equal(aitnaRootName(root), "tools/ai");
-    assert.equal(aitnaRoot(root), `${root}/tools/ai`);
-    assert.equal(akmonMount(root), `${root}/tools/ai/akmon`);
-    fs.writeFileSync(posix.join(root, ".aitna-root"), "tools/ai/\n");
-    assert.equal(aitnaRootName(root), "tools/ai");
-    for (const refused of ["", "/", "/tools/ai", "../dev", "a\nb"]) {
-      fs.writeFileSync(posix.join(root, ".aitna-root"), refused);
-      assert.throws(() => aitnaRootName(root), { name: "ValueError" }, JSON.stringify(refused));
-    }
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+  fs.writeFileSync(posix.join(root, ".aitna-root"), "tools/ai\n");
+  assert.equal(aitnaRootName(root), "tools/ai");
+  assert.equal(aitnaRoot(root), `${root}/tools/ai`);
+  assert.equal(akmonMount(root), `${root}/tools/ai/akmon`);
+  fs.writeFileSync(posix.join(root, ".aitna-root"), "tools/ai/\n");
+  assert.equal(aitnaRootName(root), "tools/ai");
+  for (const refused of ["", "/", "/tools/ai", "../dev", "a\nb"]) {
+    fs.writeFileSync(posix.join(root, ".aitna-root"), refused);
+    assert.throws(() => aitnaRootName(root), { name: "ValueError" }, JSON.stringify(refused));
   }
 });
 
@@ -219,7 +185,6 @@ test("a mounted tree beside AGENTS.md is a project root", () => {
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# A\n");
   fs.mkdirSync(posix.join(root, "_aitna", "akmon"), { recursive: true });
   assert.equal(isProjectRoot(root), true);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("the dev-layer paths keep a `..` as Path does: it is the filesystem's to resolve, not a lexical join's", () => {
@@ -234,7 +199,6 @@ test("the dev-layer paths keep a `..` as Path does: it is the filesystem's to re
     assert.equal(aitnaRoot(""), "_aitna");
   } finally {
     process.chdir(saved);
-    fs.rmSync(bare, { recursive: true, force: true });
   }
   assert.equal(aitnaRoot("/p//q/"), "/p/q/_aitna");
   assert.equal(aitnaRoot("//p"), "//p/_aitna");
@@ -246,7 +210,6 @@ test("the dev-layer paths keep a `..` as Path does: it is the filesystem's to re
   assert.equal(isProjectRoot(root), true);
   assert.equal(isProjectRoot(`${root}/missing/..`), false);
   assert.equal(isProjectRoot(`${root}/_aitna/..`), true);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("an integration record beside AGENTS.md is a project root (package mode)", () => {
@@ -255,14 +218,12 @@ test("an integration record beside AGENTS.md is a project root (package mode)", 
   fs.mkdirSync(posix.join(root, "_aitna"));
   fs.writeFileSync(posix.join(root, "_aitna", ".akmon.toml"), 'mount = "package"\n');
   assert.equal(isProjectRoot(root), true);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("AGENTS.md alone is not a project root: neither marker present", () => {
   const root = tmpdir();
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# A\n");
   assert.equal(isProjectRoot(root), false);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a declaration file beside AGENTS.md is a project root, and the walk reads no content", () => {
@@ -273,7 +234,6 @@ test("a declaration file beside AGENTS.md is a project root, and the walk reads 
   // `.aitna-root` without AGENTS.md is no root
   fs.rmSync(posix.join(root, "AGENTS.md"));
   assert.equal(isProjectRoot(root), false);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("locateProjectRoot answers null where findProjectRoot guesses", () => {
@@ -284,7 +244,6 @@ test("locateProjectRoot answers null where findProjectRoot guesses", () => {
   fs.writeFileSync(posix.join(start, ".aitna-root"), "meta\n");
   fs.mkdirSync(posix.join(start, "a", "b"), { recursive: true });
   assert.equal(locateProjectRoot(posix.join(start, "a", "b")), start);
-  fs.rmSync(start, { recursive: true, force: true });
 });
 
 test("validatedDevRootName names its source and refuses a link out of the project", () => {
@@ -305,8 +264,6 @@ test("validatedDevRootName names its source and refuses a link out of the projec
     name: "ValueError",
     message: /^--aitna-root resolves outside the project root: /,
   });
-  fs.rmSync(root, { recursive: true, force: true });
-  fs.rmSync(outside, { recursive: true, force: true });
 });
 
 test("the walk finds the root from a nested directory and stops at the nearest", () => {
@@ -316,7 +273,6 @@ test("the walk finds the root from a nested directory and stops at the nearest",
   const nested = posix.join(inner, "a", "b");
   fs.mkdirSync(nested, { recursive: true });
   assert.equal(findProjectRoot(nested), inner);
-  fs.rmSync(inner, { recursive: true, force: true });
 });
 
 test("a start reached through a symlink finds the dereferenced root", () => {
@@ -333,20 +289,17 @@ test("a start reached through a symlink finds the dereferenced root", () => {
   const nestedAlias = posix.join(base, "dev-layer-alias");
   fs.symlinkSync(posix.join(root, "_aitna"), nestedAlias);
   assert.equal(findProjectRoot(posix.join(nestedAlias, "akmon")), root);
-  fs.rmSync(base, { recursive: true, force: true });
 });
 
 test("with nothing found the walk falls back to the start directory", () => {
   const start = tmpdir();
   assert.equal(findProjectRoot(start), start);
-  fs.rmSync(start, { recursive: true, force: true });
 });
 
 test("an explicit root wins and prints no notice", () => {
   const root = tmpdir();
   const resolved = resolveProjectRoot(root);
   assert.deepEqual(resolved, { root, notice: null });
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a guessed root prints the notice naming the expected markers", () => {
@@ -357,7 +310,6 @@ test("a guessed root prints the notice naming the expected markers", () => {
   assert.ok(notice.includes(`no project root at or above ${start}`));
   assert.ok(notice.includes("expected AGENTS.md beside .aitna-root, _aitna/akmon or _aitna/.akmon.toml"));
   assert.ok(notice.includes("pass --project-root to name the root instead"));
-  fs.rmSync(start, { recursive: true, force: true });
 });
 
 test("an entry point whose root is linked answers the real path, explicit or found", () => {
@@ -370,7 +322,6 @@ test("an entry point whose root is linked answers the real path, explicit or fou
   fs.symlinkSync(root, alias);
   assert.deepEqual(resolveProjectRoot(alias), { root, notice: null });
   assert.deepEqual(resolveProjectRoot(null, posix.join(alias, "src")), { root, notice: null });
-  fs.rmSync(base, { recursive: true, force: true });
 });
 
 // `Path.resolve()` walks a path component by component: a link is expanded where it stands and a
@@ -424,7 +375,6 @@ test("path resolution matches the twin for links, `..`, and components that are 
     }
   } finally {
     process.chdir(saved);
-    fs.rmSync(base, { recursive: true, force: true });
   }
 });
 
@@ -439,20 +389,16 @@ test("a dangling link resolves to its target, as Path.resolve() follows it (C115
   fs.symlinkSync("../realdir", posix.join(tree, "linkdir"));
   fs.symlinkSync("linkdir/missing", posix.join(tree, "via"));
   fs.symlinkSync("linkdir/../up", posix.join(tree, "dotdot"));
-  try {
-    for (const [shape, answer] of [
-      ["tree/dangling", "tree/nonexistent"],
-      ["tree/dangling/", "tree/nonexistent"],
-      ["tree/chain/x", "tree/nonexistent/x"],
-      ["tree/absolute/y", "abs/missing/y"],
-      ["tree/via", "realdir/missing"],
-      ["tree/dotdot", "up"],
-      ["tree/dangling/..", "tree"],
-    ]) {
-      assert.equal(resolveProjectRoot(`${base}/${shape}`, null).root, posix.join(base, answer), shape);
-    }
-  } finally {
-    fs.rmSync(base, { recursive: true, force: true });
+  for (const [shape, answer] of [
+    ["tree/dangling", "tree/nonexistent"],
+    ["tree/dangling/", "tree/nonexistent"],
+    ["tree/chain/x", "tree/nonexistent/x"],
+    ["tree/absolute/y", "abs/missing/y"],
+    ["tree/via", "realdir/missing"],
+    ["tree/dotdot", "up"],
+    ["tree/dangling/..", "tree"],
+  ]) {
+    assert.equal(resolveProjectRoot(`${base}/${shape}`, null).root, posix.join(base, answer), shape);
   }
 });
 
@@ -462,16 +408,12 @@ test("a component the kernel refuses to look up is kept as written, as Python 3.
   // (EACCES) resolves to the path itself, and a `..` after it pops the component lexically.
   const base = tmpdir();
   const long = "x".repeat(300);
-  try {
-    assert.equal(resolveProjectRoot(`${base}/${long}`, null).root, `${base}/${long}`);
-    assert.equal(resolveProjectRoot(`${base}/${long}/a/b`, null).root, `${base}/${long}/a/b`);
-    assert.equal(resolveProjectRoot(`${base}/${long}/../z`, null).root, `${base}/z`);
-    // The walk itself asks `is_file()`, which on the 3.12 floor (through 3.13) lets an errno
-    // other than ENOENT, ENOTDIR, EBADF or ELOOP through: the over-long name raises (C115).
-    assert.throws(() => findProjectRoot(`${base}/${long}`), { code: "ENAMETOOLONG" });
-  } finally {
-    fs.rmSync(base, { recursive: true, force: true });
-  }
+  assert.equal(resolveProjectRoot(`${base}/${long}`, null).root, `${base}/${long}`);
+  assert.equal(resolveProjectRoot(`${base}/${long}/a/b`, null).root, `${base}/${long}/a/b`);
+  assert.equal(resolveProjectRoot(`${base}/${long}/../z`, null).root, `${base}/z`);
+  // The walk itself asks `is_file()`, which on the 3.12 floor (through 3.13) lets an errno
+  // other than ENOENT, ENOTDIR, EBADF or ELOOP through: the over-long name raises (C115).
+  assert.throws(() => findProjectRoot(`${base}/${long}`), { code: "ENAMETOOLONG" });
 });
 
 test("a directory that cannot be searched does not stop the resolution", { skip: process.getuid?.() === 0 }, () => {
@@ -483,7 +425,6 @@ test("a directory that cannot be searched does not stop the resolution", { skip:
     assert.equal(resolveProjectRoot(`${base}/locked/inner/../y`, null).root, `${base}/locked/y`);
   } finally {
     fs.chmodSync(posix.join(base, "locked"), 0o755);
-    fs.rmSync(base, { recursive: true, force: true });
   }
 });
 
@@ -499,7 +440,6 @@ test(
       assert.throws(() => isProjectRoot(locked), { code: "EACCES" });
     } finally {
       fs.chmodSync(locked, 0o755);
-      fs.rmSync(base, { recursive: true, force: true });
     }
   },
 );
@@ -509,13 +449,9 @@ test("a symlink loop raises naming the loop, as the stdlib's RuntimeError does",
   // on the alias would be a path no other answer agrees with. The message text is shared.
   const base = tmpdir();
   fs.symlinkSync("self", posix.join(base, "self"));
-  try {
-    assert.throws(() => resolveProjectRoot(posix.join(base, "self"), null), {
-      message: `Symlink loop from '${posix.join(base, "self")}'`,
-    });
-  } finally {
-    fs.rmSync(base, { recursive: true, force: true });
-  }
+  assert.throws(() => resolveProjectRoot(posix.join(base, "self"), null), {
+    message: `Symlink loop from '${posix.join(base, "self")}'`,
+  });
 });
 
 test("an over-long start is refused before it is resolved, in one line (C121)", () => {
@@ -536,32 +472,24 @@ test("an over-long start is refused before it is resolved, in one line (C121)", 
 
 test("the bound counts UTF-8 bytes of the Path spelling and is inclusive", () => {
   const base = tmpdir();
-  try {
-    const filler = 4096 - Buffer.byteLength(base) - 1;
-    const atBound = `${base}/${"é".repeat(Math.floor(filler / 2))}${"x".repeat(filler % 2)}`;
-    assert.equal(Buffer.byteLength(atBound), 4096);
-    // At the bound the walk runs into the kernel's own limit — the OSError is_file() raises.
-    assert.throws(() => findProjectRoot(atBound), { code: "ENAMETOOLONG" });
-    // A trailing slash is not counted: `Path` drops it before the length is taken.
-    assert.throws(() => findProjectRoot(`${atBound}/`), { code: "ENAMETOOLONG" });
-    assert.throws(() => findProjectRoot(`${atBound}x`), { name: "ValueError", message: /4097 bytes/ });
-  } finally {
-    fs.rmSync(base, { recursive: true, force: true });
-  }
+  const filler = 4096 - Buffer.byteLength(base) - 1;
+  const atBound = `${base}/${"é".repeat(Math.floor(filler / 2))}${"x".repeat(filler % 2)}`;
+  assert.equal(Buffer.byteLength(atBound), 4096);
+  // At the bound the walk runs into the kernel's own limit — the OSError is_file() raises.
+  assert.throws(() => findProjectRoot(atBound), { code: "ENAMETOOLONG" });
+  // A trailing slash is not counted: `Path` drops it before the length is taken.
+  assert.throws(() => findProjectRoot(`${atBound}/`), { code: "ENAMETOOLONG" });
+  assert.throws(() => findProjectRoot(`${atBound}x`), { name: "ValueError", message: /4097 bytes/ });
 });
 
 test("a deep start under the bound walks in linear time", () => {
   const base = tmpdir();
-  try {
-    let deep = base;
-    for (let level = 0; level < 600; level += 1) {
-      deep += "/a";
-      fs.mkdirSync(deep);
-    }
-    const began = performance.now();
-    assert.equal(findProjectRoot(deep), deep);
-    assert.ok(performance.now() - began < 5000);
-  } finally {
-    fs.rmSync(base, { recursive: true, force: true });
+  let deep = base;
+  for (let level = 0; level < 600; level += 1) {
+    deep += "/a";
+    fs.mkdirSync(deep);
   }
+  const began = performance.now();
+  assert.equal(findProjectRoot(deep), deep);
+  assert.ok(performance.now() - began < 5000);
 });

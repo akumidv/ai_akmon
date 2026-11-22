@@ -1,0 +1,20 @@
+# A spawn with no `fork_turns` key means `all` (M256): the key is added, after the received fields, as `none` (A49, M257).
+id = "hooks/codex-hook-spawn-guard-missing"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook"]
+
+[run]
+script = "codex-hook"
+args = ["spawn-guard"]
+
+[run.payload]
+tool_name = "collaborationspawn_agent"
+session_id = "sess-sg-missing"
+cwd = "{{root}}"
+tool_input = { task_name = "explore", message = "find it" }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"task_name\": \"explore\", \"message\": \"find it\", \"fork_turns\": \"none\"}}}\n"

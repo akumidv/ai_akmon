@@ -8,17 +8,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 
 import {
   CODE,
   Cap,
   Member,
+  OtherAudiences,
   Population,
   blockHeading,
   caps,
   consumer,
+  audienceSizes,
   importChain,
   markedBlock,
   over,
@@ -28,6 +29,7 @@ import {
   severity,
   shipped,
 } from "./always_loaded.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 const DATA_FILE = new URL("../../common/always_loaded.json", import.meta.url);
 const data = readAlwaysLoadedData();
@@ -38,16 +40,12 @@ const TAIL = "## Project\n\nhand-owned prose\n";
 
 /** Run `body` with a project directory holding `files`, removed after. */
 function withProject(/** @type {Record<string, string>} */ files, /** @type {(root: string) => void} */ body) {
-  const root = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-always-loaded-test-")));
-  try {
-    for (const [relative, text] of Object.entries({ [COMMON]: "rule one\nrule two\n", ...files })) {
-      fs.mkdirSync(posix.dirname(posix.join(root, relative)), { recursive: true });
-      fs.writeFileSync(posix.join(root, relative), text);
-    }
-    body(root);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+  const root = tempDir("akmon-always-loaded-test-");
+  for (const [relative, text] of Object.entries({ [COMMON]: "rule one\nrule two\n", ...files })) {
+    fs.mkdirSync(posix.dirname(posix.join(root, relative)), { recursive: true });
+    fs.writeFileSync(posix.join(root, relative), text);
   }
+  body(root);
 }
 
 test("the readers answer what the data file carries", () => {
@@ -159,8 +157,13 @@ test("changing one member moves the shipped count by exactly that member", () =>
 
 test("importChain takes the root as an option and resolves nothing outside it", () => {
   withProject({ "a.md": "a\n", "../outside.md": "o\n" }, (root) => {
-    assert.deepEqual(importChain("@a.md\n@../outside.md\n", root, { root }), [posix.join(root, "a.md")]);
-    assert.throws(() => importChain("@a.md\n", root, /** @type {any} */ (undefined)), TypeError);
+    try {
+      assert.deepEqual(importChain("@a.md\n@../outside.md\n", root, { root }), [posix.join(root, "a.md")]);
+      assert.throws(() => importChain("@a.md\n", root, /** @type {any} */ (undefined)), TypeError);
+    } finally {
+      // The file sits beside the root, in the temp folder itself, where tempDir's clean-up does not reach.
+      fs.rmSync(posix.join(root, "..", "outside.md"), { force: true });
+    }
   });
 });
 
@@ -178,6 +181,27 @@ test("the report and the cap check read the same population", () => {
   assert.equal(over(population, new Cap(2, 6)), false);
   assert.equal(over(population, new Cap(1, 6)), true);
   assert.equal(over(population, new Cap(2, 5)), true);
+});
+
+test("the other audiences are reported beside the attended head and never summed into the cap's totals (A49)", () => {
+  const cap = new Cap(100, 1000);
+  const chain = new Member("m", "ab\ncd\n");
+  const attended = new Member("hook: head", "one\ntwo\n");
+  const unattended = new Member("hook: head", "x\n");
+  const delegate = new Member("hook: subagent-start", "abc\n");
+  const population = new Population("consumer-total", [chain], [attended]);
+  const others = new OtherAudiences([unattended], [delegate]);
+  assert.equal(population.size, 6 + 8, "the cap's total is the attended head's alone");
+  assert.deepEqual(audienceSizes(population, others), [6 + 2, 6 + 4]);
+  assert.ok(Object.isFrozen(others.unattended) && Object.isFrozen(others.delegate));
+  assert.equal(
+    report(population, cap, others),
+    "consumer-total: lines=4/100 bytes=14/1000 hooks=8 unattended-head=8 delegate=10",
+  );
+  // either other audience alone is enough to report; neither leaves the report as it was
+  assert.ok(report(population, cap, new OtherAudiences([], [delegate])).endsWith(" unattended-head=6 delegate=10"));
+  assert.ok(report(population, cap, new OtherAudiences([unattended])).endsWith(" unattended-head=8 delegate=6"));
+  assert.equal(report(population, cap), "consumer-total: lines=4/100 bytes=14/1000 hooks=8");
 });
 
 test("hook text joins both scopes, is summed into the totals and is reported apart", () => {

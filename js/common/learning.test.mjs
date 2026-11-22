@@ -7,7 +7,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import {
@@ -31,6 +30,7 @@ import {
   statePath,
   writeState,
 } from "./learning.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 const DATA = readData();
 const DEFAULTS = new Thresholds(10, 7);
@@ -39,7 +39,7 @@ const at = (text) => parseUtc(text);
 
 /** A scratch project: `AGENTS.md`, an `_aitna` layer and (optionally) its record file text. */
 function project(record = "") {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-learning-")));
+  const root = tempDir("akmon-learning-");
   fs.mkdirSync(path.join(root, "_aitna"));
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# a\n");
   fs.writeFileSync(path.join(root, "_aitna", ".akmon.toml"), record);

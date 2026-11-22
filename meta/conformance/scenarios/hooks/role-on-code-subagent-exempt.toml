@@ -1,0 +1,23 @@
+# A call from inside a subagent (agent_id present) is exempt from the role reminder (A49, C28d): a
+# delegate declares no role. The head's own first edit, on the same session id, is not spent.
+id = "hooks/role-on-code-subagent-exempt"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:role-on-code"]
+
+[run]
+script = "role-on-code"
+
+[run.payload]
+hook_event_name = "PreToolUse"
+tool_name = "Edit"
+session_id = "sess-roc-sub"
+agent_id = "agent-1"
+permission_mode = "default"
+cwd = "{{root}}"
+tool_input = { file_path = "{{root}}/src/app.py" }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

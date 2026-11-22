@@ -7,7 +7,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import {
@@ -20,12 +19,13 @@ import {
   resolve,
   typedStyle,
 } from "./work_style.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 const DATA = readData();
 
 /** A scratch project: `AGENTS.md`, an `_aitna` layer and its record file text. */
 function project(record = 'mount = "package"\n') {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-work-style-")));
+  const root = tempDir("akmon-work-style-");
   fs.mkdirSync(path.join(root, "_aitna"));
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# a\n");
   fs.writeFileSync(path.join(root, "_aitna", ".akmon.toml"), record);
@@ -108,7 +108,7 @@ test("a valid entry survives beside an invalid one", () => {
 });
 
 test("the dev root is the one the project declares", () => {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-work-style-")));
+  const root = tempDir("akmon-work-style-");
   put(path.join(root, "AGENTS.md"), "# a\n");
   put(path.join(root, ".aitna-root"), "meta\n");
   put(path.join(root, "meta", ".akmon.toml"), '[work]\nstyle = "controlling"\n');
@@ -152,7 +152,7 @@ test("the value is case-insensitive and exact otherwise", () => {
 });
 
 test("recording writes the documented shape atomically", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "akmon-work-store-"));
+  const dir = tempDir("akmon-work-store-");
   const file = path.join(dir, ".local", "work-sessions.json");
   recordSessionStyle(file, "s1", "controlling", DATA);
   assert.equal(fs.readFileSync(file, "utf8"), '{\n  "sessions": {\n    "s1": "controlling"\n  }\n}\n');
@@ -160,7 +160,7 @@ test("recording writes the documented shape atomically", () => {
 });
 
 test("the store keeps only the fifty most recent sessions", () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-work-store-")), "work-sessions.json");
+  const file = path.join(tempDir("akmon-work-store-"), "work-sessions.json");
   for (let number = 0; number < 60; number += 1) {
     recordSessionStyle(file, `s${number}`, "controlling", DATA);
   }
@@ -169,7 +169,7 @@ test("the store keeps only the fifty most recent sessions", () => {
 });
 
 test("a repeated switch moves the session to the newest place and replaces its style", () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-work-store-")), "work-sessions.json");
+  const file = path.join(tempDir("akmon-work-store-"), "work-sessions.json");
   recordSessionStyle(file, "a", "controlling", DATA);
   recordSessionStyle(file, "b", "controlling", DATA);
   recordSessionStyle(file, "a", "delegating", DATA);
@@ -183,14 +183,14 @@ test("a repeated switch moves the session to the newest place and replaces its s
 });
 
 test("recording over a corrupt store replaces it", () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-work-store-")), "work-sessions.json");
+  const file = path.join(tempDir("akmon-work-store-"), "work-sessions.json");
   fs.writeFileSync(file, "{broken");
   recordSessionStyle(file, "s1", "delegating", DATA);
   assert.deepEqual([...readSessions(file, DATA)], [["s1", "delegating"]]);
 });
 
 test("a failed write leaves no temp file", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "akmon-work-store-"));
+  const dir = tempDir("akmon-work-store-");
   const file = path.join(dir, "work-sessions.json");
   fs.mkdirSync(file); // a directory where the store should be: the rename is refused
   assert.throws(() => recordSessionStyle(file, "s1", "controlling", DATA));

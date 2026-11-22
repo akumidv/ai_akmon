@@ -1,0 +1,24 @@
+# The layer rides on every `source`: compaction drops what was given only at startup (M246), so a
+# `compact` SessionStart carries the head layer again (A49).
+id = "hooks/session-start-compact-layer"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:session-start-agent"]
+
+[fixture]
+attach = "native"
+remove = ["_aitna/agents"]
+
+[run]
+script = "session-start-agent"
+
+[run.payload]
+hook_event_name = "SessionStart"
+source = "compact"
+session_id = "sess-ss-compact"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"# Rules: collaboration with the owner\\n\\nCorpus stand-in for the head layer: the owner-dialogue rules the session-start hook delivers to a session an owner attends.\\n\\n# Rules: templates\\n\\nCorpus stand-in for the shapes the head layer uses.\"}}\n"

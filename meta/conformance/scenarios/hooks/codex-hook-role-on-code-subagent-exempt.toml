@@ -1,0 +1,21 @@
+# The Codex role-on-code route stays silent for a child's call (agent_id present, M192; A49).
+id = "hooks/codex-hook-role-on-code-subagent-exempt"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook", "hook:role-on-code"]
+
+[run]
+script = "codex-hook"
+args = ["role-on-code"]
+
+[run.payload]
+tool_name = "apply_patch"
+session_id = "sess-ch-roc-sub"
+agent_id = "agent-1"
+cwd = "{{root}}"
+tool_input = { command = "*** Begin Patch\n*** Add File: src/mod.py\n+x = 1\n*** End Patch\n" }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = ""

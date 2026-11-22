@@ -13,6 +13,7 @@ import os from "node:os";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { tempDir } from "../common/temp_dir.test.mjs";
 import { main } from "./cli.mjs";
 
 // The retired AITNA_ROOT makes `verify` warn while it is set (ADR 0022 D09): a shell that exports it must not
@@ -43,16 +44,17 @@ const HOOK_STEMS = [
   "session-start-agent",
   "session_start_text",
   "settings-env-guard",
+  "subagent-start",
   "work-style",
 ];
 
 function tmpdir() {
-  return fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-cli-"));
+  return tempDir("akmon-cli-");
 }
 
 /** A project root: `AGENTS.md` and a package-mode record. */
 function project() {
-  const root = fs.realpathSync(tmpdir());
+  const root = tmpdir();
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# project\n");
   fs.mkdirSync(posix.join(root, "_aitna"));
   fs.writeFileSync(
@@ -117,7 +119,6 @@ test("run through the symlink npm installs for a bin entry, the CLI still runs",
   fs.symlinkSync(CLI, linkPath);
   const result = spawnNode(linkPath, ["version"]);
   assert.deepEqual(result, { status: 0, stdout: `${manifest.version}\n`, stderr: "" });
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("imported rather than run, the module writes nothing and leaves the exit code alone", () => {
@@ -126,7 +127,6 @@ test("imported rather than run, the module writes nothing and leaves the exit co
   fs.writeFileSync(importer, `await import("${cliModule.href}");\nprocess.stdout.write("imported\\n");\n`);
   const result = spawnNode(importer, []);
   assert.deepEqual(result, { status: 0, stdout: "imported\n", stderr: "" });
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("the exit code is process.exitCode: the run ends by itself, never through process.exit", () => {
@@ -159,7 +159,6 @@ test("path prints the real path of the running tree, whatever the cwd", async ()
   assert.deepEqual(await inProcess(["path"]), { status: 0, stdout: expected, stderr: "" });
   const elsewhere = tmpdir();
   assert.deepEqual(akmon(["path"], { cwd: elsewhere }), { status: 0, stdout: expected, stderr: "" });
-  fs.rmSync(elsewhere, { recursive: true, force: true });
 });
 
 // -- tool (C108) -------------------------------------------------------------------------------
@@ -262,28 +261,24 @@ test("learn is dispatched to its own module, usage and exit codes included", () 
   assert.equal(status.status, 0, status.stderr);
   assert.match(status.stdout, /^last run: never\ncounting since: no session recorded yet\n/);
   assert.match(akmon(["-h"]).stdout, /\n {2}learn {5}the learning agent's run record: status, this project's sessions/);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("learn takes --project-root: the status of a project the cwd is not inside", () => {
   const root = project();
-  const elsewhere = fs.realpathSync(tmpdir());
+  const elsewhere = tmpdir();
   const status = akmon(["learn", "status", "--project-root", root], { cwd: elsewhere });
   assert.equal(status.status, 0, status.stderr);
   assert.match(status.stdout, /^last run: never\n/);
-  fs.rmSync(root, { recursive: true, force: true });
-  fs.rmSync(elsewhere, { recursive: true, force: true });
 });
 
 test("learn mark with no project root refuses with the notice and writes nothing", () => {
-  const elsewhere = fs.realpathSync(tmpdir());
+  const elsewhere = tmpdir();
   const result = akmon(["learn", "mark"], { cwd: elsewhere });
   assert.equal(result.status, 2);
   assert.equal(result.stdout, "");
   assert.match(result.stderr, /^\[akmon\] no project root at or above /);
   assert.ok(result.stderr.includes("pass --project-root to name the root instead"));
   assert.deepEqual(fs.readdirSync(elsewhere), []);
-  fs.rmSync(elsewhere, { recursive: true, force: true });
 });
 
 // -- sync, check -------------------------------------------------------------------------------
@@ -297,7 +292,6 @@ test("check is the check command: same output and exit code as running bin/check
   assert.deepEqual(viaCli, direct);
   const failing = akmon(["check", "--bogus"], { cwd: root });
   assert.deepEqual(failing, { status: 2, stdout: "", stderr: "akmon check: error: Unknown option '--bogus'\n" });
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("sync is the sync command: same output and exit code as running bin/sync.mjs", () => {
@@ -309,7 +303,6 @@ test("sync is the sync command: same output and exit code as running bin/sync.mj
     const viaCli = akmon(["sync", ...args, "--project-root", root], { cwd: root });
     assert.deepEqual(viaCli, direct, args.join(" "));
   }
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("verify is the verify command: same output and exit code as running bin/verify.mjs", () => {
@@ -321,7 +314,6 @@ test("verify is the verify command: same output and exit code as running bin/ver
     const viaCli = akmon(["verify", ...args, "--project-root", root], { cwd: root });
     assert.deepEqual(viaCli, direct, args.join(" "));
   }
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 // -- hook --------------------------------------------------------------------------------------
@@ -408,7 +400,6 @@ test("hook runs a Claude hook in process: byte for byte what node runs on the sc
     input: JSON.stringify({ tool_name: "Edit", cwd: root, tool_input: { file_path: `${root}/README.md` } }),
   });
   assert.deepEqual(silent, { status: 0, stdout: "", stderr: "" });
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("hook runs the Codex dispatcher with the rest of the arguments as its route", () => {
@@ -429,7 +420,6 @@ test("hook runs the Codex dispatcher with the rest of the arguments as its route
     stdout: "",
     stderr: "akmon codex-hook hook: UsageError\n",
   });
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("hook model-routing reports through the same single document as the script", () => {
@@ -442,7 +432,6 @@ test("hook model-routing reports through the same single document as the script"
   );
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a hook module without an entry runs as an empty script does: exit 0, no output", async () => {
@@ -458,7 +447,7 @@ test("a hook module without an entry runs as an empty script does: exit 0, no ou
  * @returns {string}
  */
 function mountedProject(record) {
-  const root = fs.realpathSync(tmpdir());
+  const root = tmpdir();
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# project\n");
   fs.mkdirSync(posix.join(root, "_aitna", "akmon", "js", "akmon"), { recursive: true });
   fs.writeFileSync(posix.join(root, "_aitna", ".akmon.toml"), record);
@@ -488,7 +477,6 @@ test("a CLI that is not the mount's own hands the command over, with the skew no
     });
   }
   assert.equal(akmon(["version"], { cwd: root }).stdout, `${manifest.version}\n`, "version is the CLI's own");
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("the same version hands over without a notice; a describe distance is its own notice", () => {
@@ -499,14 +487,12 @@ test("the same version hands over without a notice; a describe distance is its o
     akmon(["check"], { cwd: root }).stderr,
     `akmon: mounted/pinned standard is v${manifest.version}-2-gabc1234, 2 commits past the tag this CLI matches — the mounted tree governs.\n`,
   );
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a Python record's mount and a package record are not handed over: this CLI answers", () => {
   for (const record of ['mount = "submodule"\nakmon_version = "0.0.1"\n', 'mount = "package"\necosystem = "node"\n']) {
     const root = mountedProject(record);
     assert.deepEqual(akmon(["path"], { cwd: root }), { status: 0, stdout: `${fs.realpathSync(TREE)}\n`, stderr: "" });
-    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -518,7 +504,7 @@ test("a Python record's mount and a package record are not handed over: this CLI
  * @returns {string}
  */
 function vendoredWithoutData(record, { manifest: treeManifest, dropReader = false } = {}) {
-  const root = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-cli-nodata-")));
+  const root = tempDir("akmon-cli-nodata-");
   for (const member of ["common", "bin", "js"]) {
     fs.cpSync(posix.join(TREE, member), posix.join(root, "_aitna/akmon", member), {
       recursive: true,
@@ -555,16 +541,12 @@ function missingDataLine(root, tag) {
 
 test("a tree without the CLI data (a Python-vendored mount) answers one line naming the file and the switch", () => {
   const root = vendoredWithoutData('mount = "vendored"\nakmon_version = "0.3.0"\n');
-  try {
-    const mountCli = posix.join(root, "_aitna/akmon/js/akmon/cli.mjs");
-    const result = spawnSync(process.execPath, [mountCli, "verify"], { cwd: root, encoding: "utf8" });
-    assert.deepEqual(
-      { status: result.status, stdout: result.stdout, stderr: result.stderr },
-      { status: 2, stdout: "", stderr: missingDataLine(root, "v0.3.0") },
-    );
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  const mountCli = posix.join(root, "_aitna/akmon/js/akmon/cli.mjs");
+  const result = spawnSync(process.execPath, [mountCli, "verify"], { cwd: root, encoding: "utf8" });
+  assert.deepEqual(
+    { status: result.status, stdout: result.stdout, stderr: result.stderr },
+    { status: 2, stdout: "", stderr: missingDataLine(root, "v0.3.0") },
+  );
 });
 
 test("a tree without its data and with no readable record still answers one line", () => {
@@ -575,15 +557,11 @@ test("a tree without its data and with no readable record still answers one line
     { root: vendoredWithoutData('mount = "vendored"\nakmon_version = "0.3.0"\n', { dropReader: true }), tag: "main" },
   ];
   for (const { root, tag } of cases) {
-    try {
-      const mountCli = posix.join(root, "_aitna/akmon/js/akmon/cli.mjs");
-      const result = spawnSync(process.execPath, [mountCli, "verify"], { cwd: root, encoding: "utf8" });
-      assert.deepEqual(
-        { status: result.status, stdout: result.stdout, stderr: result.stderr },
-        { status: 2, stdout: "", stderr: missingDataLine(root, tag) },
-      );
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
+    const mountCli = posix.join(root, "_aitna/akmon/js/akmon/cli.mjs");
+    const result = spawnSync(process.execPath, [mountCli, "verify"], { cwd: root, encoding: "utf8" });
+    assert.deepEqual(
+      { status: result.status, stdout: result.stdout, stderr: result.stderr },
+      { status: 2, stdout: "", stderr: missingDataLine(root, tag) },
+    );
   }
 });

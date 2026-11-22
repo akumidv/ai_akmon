@@ -1,0 +1,24 @@
+# No agent charters anywhere and no stale materialization: SessionStart has no roster to name, but the
+# audience's layer does not depend on one (A49) — an attended session still gets the head layer.
+id = "hooks/session-start-no-agents-layer"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:session-start-agent"]
+
+[fixture]
+attach = "native"
+remove = ["_aitna/agents"]
+
+[run]
+script = "session-start-agent"
+
+[run.payload]
+hook_event_name = "SessionStart"
+source = "startup"
+session_id = "sess-ss-empty"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"# Rules: collaboration with the owner\\n\\nCorpus stand-in for the head layer: the owner-dialogue rules the session-start hook delivers to a session an owner attends.\\n\\n# Rules: templates\\n\\nCorpus stand-in for the shapes the head layer uses.\"}}\n"

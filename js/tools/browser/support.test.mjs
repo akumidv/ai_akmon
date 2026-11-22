@@ -5,8 +5,9 @@
 
 import { test } from "node:test";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
+
+import { tempDir } from "../../common/temp_dir.test.mjs";
 
 test("support module loads", () => {});
 
@@ -29,16 +30,17 @@ export function fakeHost(given = {}) {
 }
 
 /**
- * A throwaway akmon project: `AGENTS.md` and a dev root `_aitna` holding the record.
+ * A throwaway akmon project: `AGENTS.md` and a dev root `_aitna` holding the record. The folder is
+ * removed when the test process exits; `dispose` stays for the callers that still call it and does nothing.
  * @param {string} [record] the text of `_aitna/.akmon.toml`
  * @returns {{root: string, dispose: () => void}}
  */
 export function tempProject(record = "") {
-  const root = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-browser-")));
+  const root = tempDir("akmon-browser-");
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# agents\n");
   fs.mkdirSync(posix.join(root, "_aitna"));
   fs.writeFileSync(posix.join(root, "_aitna", ".akmon.toml"), record);
-  return { root, dispose: () => fs.rmSync(root, { recursive: true, force: true }) };
+  return { root, dispose: () => {} };
 }
 
 /**

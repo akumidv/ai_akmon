@@ -200,9 +200,27 @@ def test_codex_pretooluse_matcher_names_routes_not_spellings(tmp_path):
     planned = next(item for item in files if item.path.relative_to(root).as_posix() == ".codex/hooks.json")
     matchers = [entry["matcher"] for entry in json.loads(planned.content)["hooks"]["PreToolUse"]]
 
-    assert matchers == ["Bash|apply_patch"]
+    # the second group is the spawn guard (A49, M256): the whole name of the spawn tool, and no pattern
+    assert matchers == ["Bash|apply_patch", "collaborationspawn_agent"]
     for spelling in ("Edit", "Write", "MultiEdit", ".*"):
         assert spelling not in matchers[0]
+
+
+def test_qwen_md_imports_the_head_layer_under_the_projects_prefix(tmp_path):
+    """A49, D-A49-QWEN-CARRIER: Qwen Code loads QWEN.md and expands its imports (M253), and no hook runs there."""
+    root = _make_root(tmp_path)
+    files, _ = sync._planned_files(root)
+    qwen = next(item for item in files if item.path.relative_to(root).as_posix() == "QWEN.md")
+    assert sync.generated_marker() in qwen.content  # the do-not-edit banner
+    assert "AGENTS.md" in qwen.content
+    lines = qwen.content.splitlines()
+    assert "@_aitna/akmon/rules/collaboration.md" in lines
+    assert "@_aitna/akmon/rules/templates.md" in lines
+    assert not any("unattended" in line for line in lines)  # an unattended layer is no Qwen head's
+    (root / "_aitna" / ".akmon.toml").write_text('mount = "package"\n', encoding="utf-8")
+    packaged, _ = sync._planned_files(root)
+    qwen = next(item for item in packaged if item.path.relative_to(root).as_posix() == "QWEN.md")
+    assert "@_aitna/.akmon/rules/collaboration.md" in qwen.content.splitlines()
 
 
 def test_planned_files_include_all_vendor_pointers(tmp_path):
@@ -212,6 +230,7 @@ def test_planned_files_include_all_vendor_pointers(tmp_path):
     assert {
         "CLAUDE.md",
         "GEMINI.md",
+        "QWEN.md",
         ".github/copilot-instructions.md",
         ".codex/README.md",
         ".codex/hooks.json",
@@ -818,6 +837,8 @@ def test_sync_data_pins_its_structure():
         "skill_stubs",
         "skill_stub_dirs",
         "always_imported",
+        # the rule files a hook delivers instead of an import (A49); package mode still materializes them
+        "hook_delivered",
         "imports_region",
         "moved_imports",
         # the language → profile map init writes a fresh block from and verify checks against (C127)
@@ -857,7 +878,13 @@ def test_sync_data_pins_its_structure():
     assert _SYNC_DATA["node_hook_command"] == 'node "{{anchor}}/{{hooks_dir}}/{{script}}.mjs"'
     assert _SYNC_DATA["node_codex_hook_command"] == 'node "{{anchor}}/{{hooks_dir}}/codex-hook.mjs"'
     # the wiring tables: matcher entries and hook commands, order load-bearing
-    assert list(_SYNC_DATA["claude_hooks"]) == ["PreToolUse", "SessionStart", "UserPromptSubmit", "Stop"]
+    assert list(_SYNC_DATA["claude_hooks"]) == [
+        "PreToolUse",
+        "SessionStart",
+        "SubagentStart",
+        "UserPromptSubmit",
+        "Stop",
+    ]
     assert len(_SYNC_DATA["claude_hooks"]["PreToolUse"]) == 4
     assert _SYNC_DATA["claude_hooks"]["PreToolUse"][0] == {
         "matcher": "Bash|mcp__akmon-browser__.*",
@@ -881,6 +908,7 @@ def test_sync_data_pins_its_structure():
         ["CLAUDE.md", "claude_md"],
         [".github/copilot-instructions.md", "copilot_md"],
         ["GEMINI.md", "gemini_md"],
+        ["QWEN.md", "qwen_md"],
         [".codex/README.md", "codex_readme"],
         [".codex/hooks.json", "codex_hooks_text"],
     ]
@@ -889,12 +917,8 @@ def test_sync_data_pins_its_structure():
         "---\n# {{banner}}\n{{frontmatter}}\n---\n\n# {{name}}\n\n{{body}}"
     )
     assert _SYNC_DATA["skill_stub_dirs"] == [".claude/skills", ".agents/skills"]
-    assert _SYNC_DATA["always_imported"] == [
-        "guardrails/_common.md",
-        "rules/collaboration.md",
-        "rules/templates.md",
-        "rules/code.md",
-    ]
+    assert _SYNC_DATA["always_imported"] == ["guardrails/_common.md", "rules/code.md"]
+    assert _SYNC_DATA["hook_delivered"] == ["rules/collaboration.md", "rules/templates.md", "rules/unattended.md"]
     assert _SYNC_DATA["imports_region"] == {"open": "<!-- akmon:imports -->", "close": "<!-- /akmon:imports -->"}
     assert _SYNC_DATA["moved_imports"] == {"guardrails/python.md": "profiles/python.md"}
     assert _SYNC_DATA["ruff_configs"][0] == ["pyproject.toml", ["tool", "ruff"]]
@@ -1103,8 +1127,6 @@ def test_imports_region_is_the_markers_around_one_import_per_always_imported_fil
     assert sync.imports_region("_aitna/akmon") == [
         _REGION_OPEN,
         "@_aitna/akmon/guardrails/_common.md",
-        "@_aitna/akmon/rules/collaboration.md",
-        "@_aitna/akmon/rules/templates.md",
         "@_aitna/akmon/rules/code.md",
         _REGION_CLOSE,
     ]
@@ -1150,7 +1172,7 @@ def test_sync_migrates_the_single_common_import_into_the_region(tmp_path):
 
 def test_sync_migration_folds_every_hand_written_rule_import_into_the_one_region(tmp_path):
     text = (
-        f"{_HEADING}\n\n@_aitna/akmon/guardrails/_common.md\nprose\n@_aitna/akmon/rules/templates.md\n"
+        f"{_HEADING}\n\n@_aitna/akmon/guardrails/_common.md\nprose\n@_aitna/akmon/rules/code.md\n"
         "@_aitna/akmon/profiles/js.md\n"
     )
     root = _agents_root(tmp_path, text)

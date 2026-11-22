@@ -7,9 +7,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 
+import { tempDir } from "../common/temp_dir.test.mjs";
 import {
   accept,
   fileTrust,
@@ -31,7 +31,7 @@ const at = (second) => new Date(Date.UTC(2026, 0, 2, 3, 4, second));
  * @param {{interactive?: boolean, answers?: string[]}} [options]
  */
 function terminal({ interactive = true, answers = [] } = {}) {
-  const base = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-trust-cli-")));
+  const base = tempDir("akmon-trust-cli-");
   const root = posix.join(base, "proj");
   fs.mkdirSync(posix.join(root, "_aitna", "akmon"), { recursive: true });
   fs.writeFileSync(posix.join(root, "AGENTS.md"), "# project\n");

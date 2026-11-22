@@ -102,11 +102,20 @@ def _paragraph_tail(lines: list[str], index: int) -> str:
     return " ".join(tail)
 
 
+#: The directories whose prose may carry a ``Runtime check:`` marker.
+_PROSE_DIRECTORIES = ("guardrails", "rules")
+
+
 def _read_prose(root: Path) -> tuple[list[ProseMarker], list[Finding]]:
-    """Every marker in live guardrail prose, plus a finding for each legacy enforcement claim."""
+    """Every marker in live guardrail and rule prose, plus a finding for each legacy enforcement claim.
+
+    The rules are read beside the guardrails because a policy can live in the head layer
+    (``rules/collaboration.md`` holds ``role.declaration`` and the head's ``analysis.before-mutation``, A49).
+    """
     markers: list[ProseMarker] = []
     findings: list[Finding] = []
-    for path in sorted((root / "guardrails").glob("**/*.md")):
+    paths = sorted(path for directory in _PROSE_DIRECTORIES for path in (root / directory).glob("**/*.md"))
+    for path in paths:
         lines = path.read_text(encoding="utf-8").splitlines()
         for number, line in enumerate(lines, start=1):
             location = _location(root, path, number)

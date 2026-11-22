@@ -87,6 +87,16 @@
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/hooks/subagent-start.py\""
+          }
+        ]
+      }
     ]
   }
 }

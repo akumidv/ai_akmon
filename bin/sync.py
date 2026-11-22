@@ -311,6 +311,19 @@ def _gemini_md(data: Mapping[str, Any], root: Path) -> str:
     return jsondata.fill(data["vendor_pointers"]["gemini_md"], {"banner": generated_banner(root)})
 
 
+def _qwen_md(data: Mapping[str, Any], root: Path) -> str:
+    """The generated ``QWEN.md`` body (``sync.json``): Qwen Code's head carrier for the owner-dialogue rules.
+
+    Qwen Code loads ``QWEN.md`` and ``AGENTS.md`` and expands ``@``-imports (M253), but a consumer's
+    project hooks do not run there (M255), so the hook that delivers the head layer elsewhere cannot.
+    The pointer imports it under the project's own import prefix (A49, D-A49-QWEN-CARRIER).
+    """
+    return jsondata.fill(
+        data["vendor_pointers"]["qwen_md"],
+        {"banner": generated_banner(root), "import_prefix": import_prefix(root)},
+    )
+
+
 def _codex_readme(data: Mapping[str, Any], root: Path) -> str:
     """The generated Codex ``README.md`` body (``sync.json``)."""
     return jsondata.fill(data["vendor_pointers"]["codex_readme"], {"banner": generated_banner(root)})
@@ -697,6 +710,17 @@ def always_imported(data: Mapping[str, Any] | None = None) -> list[str]:
     return list(_or_read(data)["always_imported"])
 
 
+def hook_delivered(data: Mapping[str, Any] | None = None) -> list[str]:
+    """The standard's rule files a hook delivers instead of an ``@``-import (``sync.json``).
+
+    The head layer and the unattended layer (``common/audience.json``): no consumer file imports them,
+    so a project's context carries each only for the audience it is meant for. Package mode still
+    materializes them, because the consumer's fallback section of ``AGENTS.md`` and its ``QWEN.md``
+    point at the materialized copy.
+    """
+    return list(_or_read(data)["hook_delivered"])
+
+
 def moved_imports(data: Mapping[str, Any] | None = None) -> dict[str, str]:
     """Imports of a file the standard has moved, and where it went (``sync.json``).
 
@@ -982,7 +1006,8 @@ def _materialized_files(root: Path, data: Mapping[str, Any] | None = None) -> tu
     """Package-mode materialization (ADR 0009 §4, narrowed by C77, widened to profiles by ADR 0014).
 
     The guardrails, rules and profiles the consumer's ``AGENTS.md`` imports (the ``always_imported``
-    files whether or not it does yet), the ruff rules its ruff configuration extends, and nothing else.
+    files whether or not it does yet), the rule files a hook delivers (:func:`hook_delivered`, A49), the
+    ruff rules its ruff configuration extends, and nothing else.
 
     Nothing executable is copied any more. The hooks, the ``common`` package they import, the
     routing library and its registry are already installed beside the consumer, inside the
@@ -1008,12 +1033,18 @@ def _materialized_files(root: Path, data: Mapping[str, Any] | None = None) -> tu
         return [], errors
     source = standard_tree_root(root)
     dest = aitna_root(root) / ".akmon"
+    delivered = [name for name in hook_delivered(data) if name not in names]
+    errors.extend(
+        f"the standard does not ship a hook-delivered file: {name}"
+        for name in delivered
+        if not (source / name).is_file()
+    )
     files = [
         PlannedFile(
             dest / name,
             materialized_text(name, (source / name).read_text(encoding="utf-8"), root),
         )
-        for name in names
+        for name in [*names, *delivered]
         if (source / name).is_file()
     ]
     return files, errors
@@ -1115,6 +1146,7 @@ def _planned_files(root: Path, data: Mapping[str, Any] | None = None) -> tuple[l
         "claude_md": _claude_md,
         "copilot_md": _copilot_md,
         "gemini_md": _gemini_md,
+        "qwen_md": _qwen_md,
         "codex_readme": _codex_readme,
         "codex_hooks_text": lambda data, root: _codex_hooks_text(root, data),
     }

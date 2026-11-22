@@ -3,6 +3,8 @@
     "analysis-guard",
     "role-on-code",
     "session-start",
+    "subagent-start",
+    "spawn-guard",
     "learning-reminder",
     "work-style",
     "git-commit-guard"

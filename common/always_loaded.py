@@ -20,6 +20,13 @@ false saving. It joins **both** scopes as the :attr:`Population.hooks` members, 
 (every optional line present, see ``hooks/session_start_text.py``), summed into the totals and
 reported on its own as ``hooks=<bytes>``. The wiring itself stays outside the scopes.
 
+The hook text differs by audience (task A49, ``docs/design/context-audiences.md``): the session an owner
+attends gets the head layer at SessionStart, a session no owner attends gets the unattended layer, and a
+delegate gets the unattended layer from SubagentStart and nothing else from the hooks. The population and the
+cap are the **attended head**'s, the largest of the three; :func:`report` puts the other two beside it as
+``unattended-head=<bytes>`` and ``delegate=<bytes>``, each the chain plus that audience's hook text
+(:class:`OtherAudiences`).
+
 :func:`over` and :func:`report` read the same :class:`Population`, so the numbers a reader sees
 are the numbers the cap was checked against — never a stale constant.
 """
@@ -134,6 +141,23 @@ class Population:
         return sum(member.size for member in self.hooks)
 
 
+@dataclass(frozen=True)
+class OtherAudiences:
+    """The hook text of the two audiences the cap is not checked against: an unattended head and a delegate."""
+
+    unattended: tuple[Member, ...] = ()
+    delegate: tuple[Member, ...] = ()
+
+
+def audience_sizes(population: Population, others: OtherAudiences) -> tuple[int, int]:
+    """The bytes an unattended head and a delegate carry: ``population``'s members plus each one's hook text."""
+    chain = sum(member.size for member in population.members)
+    return (
+        chain + sum(member.size for member in others.unattended),
+        chain + sum(member.size for member in others.delegate),
+    )
+
+
 def marked_block(agents_text: str) -> str | None:
     """The akmon block of ``AGENTS.md``: its heading line up to the next peer ``##`` or EOF."""
     heading = block_heading()
@@ -206,16 +230,22 @@ def populations(
     }
 
 
-def report(population: Population, cap: Cap) -> str:
+def report(population: Population, cap: Cap, others: OtherAudiences = OtherAudiences()) -> str:  # noqa: B008
     """The dynamic report — scope, actual over cap for both dimensions, then the hook bytes inside them.
 
     ``hooks=`` is a ceiling (every optional SessionStart line present); the finding that carries the
-    report names the code, so the message does not repeat it.
+    report names the code, so the message does not repeat it. The numbers up to ``hooks=`` are the attended
+    head's; ``unattended-head=`` and ``delegate=`` follow, in total bytes, when ``others`` carries those
+    audiences' hook text (:func:`audience_sizes`).
     """
-    return (
+    text = (
         f"{population.scope}: lines={population.lines}/{cap.lines} bytes={population.size}/{cap.bytes}"
         f" hooks={population.hook_size}"
     )
+    if others.unattended or others.delegate:
+        unattended, delegate = audience_sizes(population, others)
+        text += f" unattended-head={unattended} delegate={delegate}"
+    return text
 
 
 def over(population: Population, cap: Cap) -> bool:

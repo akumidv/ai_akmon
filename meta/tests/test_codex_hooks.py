@@ -73,8 +73,8 @@ def test_expected_codex_hooks_maps_every_event_the_real_generator_wires(tmp_path
     """The generator and `_EVENT_NAMES` must not drift: an event it starts wiring with no
     hooks/list mapping would otherwise only surface as a CodexWiringError inside `verify`."""
     expected = expected_codex_hooks(sync._codex_hooks(tmp_path))
-    assert len(expected) == 5
-    assert {event for event, _, _ in expected} == {"preToolUse", "sessionStart", "userPromptSubmit"}
+    assert len(expected) == 7
+    assert {event for event, _, _ in expected} == {"preToolUse", "sessionStart", "subagentStart", "userPromptSubmit"}
 
 
 @pytest.mark.parametrize(
@@ -634,6 +634,7 @@ def test_codex_hooks_json_carries_the_closed_tables():
     assert data["event_names"] == {
         "PreToolUse": "preToolUse",
         "SessionStart": "sessionStart",
+        "SubagentStart": "subagentStart",
         "UserPromptSubmit": "userPromptSubmit",
     }
     assert set(data["trust_statuses"]) == {"managed", "untrusted", "trusted", "modified"}

@@ -66,3 +66,10 @@ reason = "a payload path too long for one stat: the running Python's Path.is_fil
 streams = ["stdout", "stderr"]
 mutation = "long-string:*"
 python_enametoolong = "swallows"
+
+[[known]]
+dv = "DV46"
+reason = "a lone surrogate in a settings edit's file_path: Python's read raises UnicodeEncodeError (crash-open, a systemMessage notice), node's read of the path is ENOENT and passes silently; both allow the edit"
+scripts = ["settings-env-guard"]
+streams = ["stdout", "stderr"]
+mutation = "lone-surrogate:start:tool_input.file_path"

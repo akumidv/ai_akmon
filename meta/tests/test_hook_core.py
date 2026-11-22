@@ -1564,6 +1564,7 @@ def test_hook_core_json_holds_the_policy_and_texts():
         "browser_attached_close_reason",
         "escalated_ask_suffix",
         "stale_guardrail_notice",
+        "spawn_guard",
     }
     assert data["code_extensions"][:3] == [".py", ".pyi", ".ts"]
     assert data["code_extensions"][-2:] == [".m", ".mm"]

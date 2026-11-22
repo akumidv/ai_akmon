@@ -7,10 +7,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { tempDir } from "../common/temp_dir.test.mjs";
 
 const HOOK = posix.join(posix.dirname(fileURLToPath(import.meta.url)), "settings-env-guard.mjs");
 
@@ -26,22 +26,18 @@ function run(input) {
 }
 
 /**
- * A `.claude/settings.json` holding `text` (none when `null`), in a fresh directory removed after.
+ * A `.claude/settings.json` holding `text` (none when `null`), in a fresh directory (`tempDir` removes it when the process exits).
  * @param {string | null} text
  * @param {(path: string) => void} body
  */
 function withSettings(text, body) {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-settings-env-"));
-  try {
-    const path = posix.join(dir, ".claude", "settings.json");
-    fs.mkdirSync(posix.dirname(path));
-    if (text !== null) {
-      fs.writeFileSync(path, text);
-    }
-    body(path);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+  const dir = tempDir("akmon-settings-env-");
+  const path = posix.join(dir, ".claude", "settings.json");
+  fs.mkdirSync(posix.dirname(path));
+  if (text !== null) {
+    fs.writeFileSync(path, text);
   }
+  body(path);
 }
 
 test("the hook denies a write that changes the env of the file on disk", () => {

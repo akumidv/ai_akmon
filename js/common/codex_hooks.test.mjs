@@ -9,7 +9,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 
 import {
@@ -22,6 +21,7 @@ import {
   queryHooksList,
   readCodexHooksData,
 } from "./codex_hooks.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 const DATA_FILE = new URL("../../common/codex_hooks.json", import.meta.url);
 const SOURCE = fs.readFileSync(new URL("./codex_hooks.mjs", import.meta.url), "utf-8");
@@ -68,6 +68,7 @@ test("the loader reads exactly codex_hooks.json, which carries the closed tables
   assert.deepEqual(data.event_names, {
     PreToolUse: "preToolUse",
     SessionStart: "sessionStart",
+    SubagentStart: "subagentStart",
     UserPromptSubmit: "userPromptSubmit",
   });
   assert.equal(DEFAULT_TIMEOUT_SECONDS, 5);
@@ -309,7 +310,7 @@ test("queryHooksList propagates a runner's protocol kind, rebuilt from the kind 
  * @param {(dir: string) => Promise<void>} body
  */
 async function withFakeCodex(source, body) {
-  const dir = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-codex-test-")));
+  const dir = tempDir("akmon-codex-test-");
   const bin = posix.join(dir, "bin");
   fs.mkdirSync(bin);
   fs.writeFileSync(posix.join(bin, "codex"), `#!${process.execPath}\n${source}`, { mode: 0o755 });
@@ -319,7 +320,6 @@ async function withFakeCodex(source, body) {
     await body(dir);
   } finally {
     process.env.PATH = savedPath;
-    fs.rmSync(dir, { recursive: true, force: true });
   }
 }
 
@@ -575,36 +575,28 @@ test("defaultRunner: an answer whose id is 2 is returned as given, even when it 
 });
 
 test("defaultRunner: an unstartable binary or cwd is reported by kind, not by the OS text", async () => {
-  const dir = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-codex-test-")));
-  try {
-    for (const [command, cwd] of /** @type {Array<[string[], string]>} */ ([
-      [[posix.join(dir, "no-such-codex")], dir],
-      [["no-such-codex-akmon-xyz"], dir],
-      [[process.execPath, "-e", "0"], posix.join(dir, "no-such-cwd")],
-      [[""], dir],
-    ])) {
-      await assert.rejects(defaultRunner(command, cwd, 1), (error) => {
-        assert.ok(error instanceof CodexProtocolError);
-        assert.equal(error.kind, "unstartable");
-        assert.ok(!error.message.includes("ENOENT") && !error.message.includes("No such file"));
-        return true;
-      });
-    }
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+  const dir = tempDir("akmon-codex-test-");
+  for (const [command, cwd] of /** @type {Array<[string[], string]>} */ ([
+    [[posix.join(dir, "no-such-codex")], dir],
+    [["no-such-codex-akmon-xyz"], dir],
+    [[process.execPath, "-e", "0"], posix.join(dir, "no-such-cwd")],
+    [[""], dir],
+  ])) {
+    await assert.rejects(defaultRunner(command, cwd, 1), (error) => {
+      assert.ok(error instanceof CodexProtocolError);
+      assert.equal(error.kind, "unstartable");
+      assert.ok(!error.message.includes("ENOENT") && !error.message.includes("No such file"));
+      return true;
+    });
   }
 });
 
 test("defaultRunner: a non-executable file is unstartable", async () => {
-  const dir = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-codex-test-")));
-  try {
-    fs.writeFileSync(posix.join(dir, "codex"), "#!/bin/sh\n", { mode: 0o644 });
-    await assert.rejects(defaultRunner([posix.join(dir, "codex")], dir, 1), {
-      message: data.protocol_failures.unstartable,
-    });
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-codex-test-");
+  fs.writeFileSync(posix.join(dir, "codex"), "#!/bin/sh\n", { mode: 0o644 });
+  await assert.rejects(defaultRunner([posix.join(dir, "codex")], dir, 1), {
+    message: data.protocol_failures.unstartable,
+  });
 });
 
 test("queryHooksList uses defaultRunner by default, end to end", async () => {

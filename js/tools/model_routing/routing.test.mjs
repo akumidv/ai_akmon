@@ -7,9 +7,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 
+import { tempDir } from "../../common/temp_dir.test.mjs";
 import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { read } from "../../common/jsondata.mjs";
 import {
@@ -94,19 +94,15 @@ test("a falsy transcript_path of any JSON type is no transcript (Python: `if not
 });
 
 test("activeRole reads `🧭 role:` and the `🧭 agent:` alias, the last declaration winning", () => {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-role-decl-"));
-  try {
-    const turn = (/** @type {string} */ text) => JSON.stringify({ type: "assistant", message: { content: text } });
-    const transcript = posix.join(dir, "t.jsonl");
-    fs.writeFileSync(transcript, `${turn("🧭 agent: Review — alias")}\n`);
-    assert.equal(activeRole(transcript), "review");
-    fs.writeFileSync(transcript, `${turn("🧭 role: engineer — new")}\n${turn("🧭 agent: architect — alias")}\n`);
-    assert.equal(activeRole(transcript), "architect");
-    fs.writeFileSync(transcript, `${turn("🧭 agent: architect — alias")}\n${turn("🧭 role: Engineer — new")}\n`);
-    assert.equal(activeRole(transcript), "engineer");
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-role-decl-");
+  const turn = (/** @type {string} */ text) => JSON.stringify({ type: "assistant", message: { content: text } });
+  const transcript = posix.join(dir, "t.jsonl");
+  fs.writeFileSync(transcript, `${turn("🧭 agent: Review — alias")}\n`);
+  assert.equal(activeRole(transcript), "review");
+  fs.writeFileSync(transcript, `${turn("🧭 role: engineer — new")}\n${turn("🧭 agent: architect — alias")}\n`);
+  assert.equal(activeRole(transcript), "architect");
+  fs.writeFileSync(transcript, `${turn("🧭 agent: architect — alias")}\n${turn("🧭 role: Engineer — new")}\n`);
+  assert.equal(activeRole(transcript), "engineer");
 });
 
 test("a truthy transcript_path that is not a string is the TypeError Path() raises", () => {
@@ -311,7 +307,7 @@ test("the local config records the session stanza only when one is given, and th
  * @returns {string}
  */
 function scratch(files = {}) {
-  const root = fs.mkdtempSync(posix.join(os.tmpdir(), "routing-test-"));
+  const root = tempDir("routing-test-");
   const all = { "_aitna/akmon/tools/model_routing/registry.json": JSON.stringify(SHIPPED), ...files };
   for (const [rel, text] of Object.entries(all)) {
     fs.mkdirSync(posix.dirname(posix.join(root, rel)), { recursive: true });
@@ -328,7 +324,6 @@ test("the developer's overlay sits under the dev layer's local folder, wherever 
   fs.writeFileSync(posix.join(root, ".aitna-root"), "meta\n");
   assert.equal(localOverlayPath(AGENTS, root), `${root}/meta/.local/model-routing.json`);
   assert.equal(overlayPath(AGENTS, root), `${root}/meta/model-routing.json`);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("the local overlay is the strongest layer, a ladder is replaced whole and a sibling key survives", () => {
@@ -420,19 +415,15 @@ test("without a project root a retired key in the merged registry names both can
 
 test("an unlayered retired-key refusal names both files under the declared dev root", () => {
   const root = scratch({ ".aitna-root": "tools/ai\n" });
-  try {
-    assert.throws(
-      () => refuseRetiredKeys(AGENTS, { second_opinion_policy: { diversity_ladder: [] } }, {}, root),
-      (error) => {
-        assert.ok(error instanceof RetiredKeyError);
-        assert.ok(error.message.includes("tools/ai/.local/model-routing.json or tools/ai/model-routing.json"));
-        assert.ok(!error.message.includes("_aitna"));
-        return true;
-      },
-    );
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  assert.throws(
+    () => refuseRetiredKeys(AGENTS, { second_opinion_policy: { diversity_ladder: [] } }, {}, root),
+    (error) => {
+      assert.ok(error instanceof RetiredKeyError);
+      assert.ok(error.message.includes("tools/ai/.local/model-routing.json or tools/ai/model-routing.json"));
+      assert.ok(!error.message.includes("_aitna"));
+      return true;
+    },
+  );
 });
 
 test("an unpinned declared argv drops each element holding the placeholder and the bare flag that pointed at a lone one", () => {
@@ -712,7 +703,7 @@ test("an alias without a mapping is refused naming the refresh", () => {
 });
 
 test("the resolved aliases file round-trips and a missing one is empty", () => {
-  const root = fs.mkdtempSync(posix.join(os.tmpdir(), "routing-aliases-"));
+  const root = tempDir("routing-aliases-");
   assert.deepEqual(readModelAliases(AGENTS, root), {});
   const entries = {
     codex: new ProviderAliases("~/x (codex-models-cache)", "0.164.0", { sol: "gpt-6.1-sol" }),
@@ -736,7 +727,7 @@ test("a resolved aliases file of the wrong shape is refused naming it", () => {
     '{"codex": {"source": "s", "client": null, "aliases": {"sol": 1}}}',
   ];
   for (const text of texts) {
-    const root = fs.mkdtempSync(posix.join(os.tmpdir(), "routing-aliases-"));
+    const root = tempDir("routing-aliases-");
     const path = localAliasesPath(AGENTS, root);
     fs.mkdirSync(posix.dirname(path), { recursive: true });
     fs.writeFileSync(path, text);

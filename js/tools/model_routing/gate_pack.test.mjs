@@ -6,9 +6,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
+import { tempDir } from "../../common/temp_dir.test.mjs";
 import {
   buildFullPack,
   buildPlanCheckPack,
@@ -53,7 +53,7 @@ function run(argv) {
  * @returns {string}
  */
 function project(files) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "gate-pack-test-"));
+  const root = tempDir("gate-pack-test-");
   fs.writeFileSync(path.join(root, "AGENTS.md"), "x");
   for (const [rel, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -170,7 +170,7 @@ test("the default pack lands under the dev root the project declares", () => {
 });
 
 test("with no project root and no --out it prints the notice, exits 2 and writes nothing", () => {
-  const lone = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "gate-pack-lone-")));
+  const lone = tempDir("gate-pack-lone-");
   fs.writeFileSync(path.join(lone, "y.md"), "goal\n");
   const saved = process.cwd();
   try {
@@ -187,7 +187,6 @@ test("with no project root and no --out it prints the notice, exits 2 and writes
     assert.deepEqual(fs.readdirSync(lone).sort(), ["p.md", "y.md"]);
   } finally {
     process.chdir(saved);
-    fs.rmSync(lone, { recursive: true, force: true });
   }
 });
 

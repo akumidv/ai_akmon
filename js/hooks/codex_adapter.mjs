@@ -478,7 +478,7 @@ export function printResult(data, result) {
     return;
   }
   const keys = _documentKeys(data);
-  /** @type {Map<string, string>} */
+  /** @type {Map<string, string | Record<string, unknown>>} */
   const output = new Map([[dictItem(keys, "event_name"), result.eventName]]);
   if (result.additionalContext !== null) {
     output.set(dictItem(keys, "additional_context"), result.additionalContext);
@@ -488,6 +488,9 @@ export function printResult(data, result) {
   }
   if (result.permissionReason !== null) {
     output.set(dictItem(keys, "permission_reason"), result.permissionReason);
+  }
+  if (result.updatedInput !== null) {
+    output.set(dictItem(keys, "updated_input"), result.updatedInput);
   }
   const topLevel = new Map([[dictItem(keys, "hook_specific_output"), output]]);
   // `result.systemMessage` is dropped: Codex hooks have no documented user-facing channel.

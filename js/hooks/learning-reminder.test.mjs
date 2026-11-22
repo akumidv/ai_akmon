@@ -7,20 +7,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { readData, readThresholds, readState, Thresholds } from "../common/learning.mjs";
 import { learningReminderResult, payloadEvent } from "./learning-reminder.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 
 const _HOOK = fileURLToPath(new URL("./learning-reminder.mjs", import.meta.url));
 const DATA = readData();
 
 /** A scratch project whose record asks for a reminder at two sessions. */
 function project(record = '[learning]\nreminder_sessions = "2"\n') {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-learning-hook-")));
+  const root = tempDir("akmon-learning-hook-");
   fs.mkdirSync(path.join(root, "_aitna"));
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# a\n");
   fs.writeFileSync(path.join(root, "_aitna", ".akmon.toml"), record);
@@ -123,21 +123,17 @@ test("an unwritable layer is the crash notice and exit 0", { skip: process.getui
 });
 
 test("with no project root the hook is silent and writes nothing: there is no local layer to record in", () => {
-  const lone = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-learning-lone-")));
-  try {
-    for (const fields of [
-      { session_id: "s1", source: "startup" },
-      { session_id: "s2", source: "startup" },
-      { session_id: "s3", source: "startup" },
-    ]) {
-      const run = start({ root: lone }, fields);
-      assert.equal(run.stdout, "");
-      assert.equal(run.stderr, "");
-    }
-    assert.deepEqual(fs.readdirSync(lone), []);
-  } finally {
-    fs.rmSync(lone, { recursive: true, force: true });
+  const lone = tempDir("akmon-learning-lone-");
+  for (const fields of [
+    { session_id: "s1", source: "startup" },
+    { session_id: "s2", source: "startup" },
+    { session_id: "s3", source: "startup" },
+  ]) {
+    const run = start({ root: lone }, fields);
+    assert.equal(run.stdout, "");
+    assert.equal(run.stderr, "");
   }
+  assert.deepEqual(fs.readdirSync(lone), []);
 });
 
 test("learningReminderResult is the SessionStart result, or null when nothing is due", () => {

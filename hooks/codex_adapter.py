@@ -325,13 +325,15 @@ def print_result(result: HookResult | None) -> None:
     if result is None:
         return
     keys = _document_keys()
-    output: dict[str, str] = {keys["event_name"]: result.event_name}
+    output: dict[str, Any] = {keys["event_name"]: result.event_name}
     if result.additional_context is not None:
         output[keys["additional_context"]] = result.additional_context
     if result.permission_decision is not None:
         output[keys["permission_decision"]] = result.permission_decision
     if result.permission_reason is not None:
         output[keys["permission_reason"]] = result.permission_reason
+    if result.updated_input is not None:
+        output[keys["updated_input"]] = result.updated_input
     top_level: dict[str, Any] = {keys["hook_specific_output"]: output}
     if result.system_message is not None:
         # Codex hooks have no documented user-facing channel; pass silently for now.

@@ -65,39 +65,29 @@ non-trivial work" are not machine-checked.
 
 - Confirm names, signatures, enums, env-var names, and file paths **in the code/docs**
   before relying on or documenting them — they drift.
-- **Owner-accept consequential choices** in math, data shape, or architecture before
-  implementation; record the accepted scope in a thematic ADR block. Verify the resulting
-  implementation against that intent and its evidence, without requesting acceptance of
-  unchanged design again. Passing tests and plausibility are necessary, not sufficient.
+- **Consequential choices in math, data shape or architecture are the owner's,** accepted before
+  implementation and recorded in a thematic ADR block. Verify the resulting implementation against
+  that intent and its evidence, without requesting acceptance of unchanged design again. Passing
+  tests and plausibility are necessary, not sufficient.
 - **Knowledge no source gives is gathered with the user; a math question to the owner first gathers
   how the industry does it** ([knowledge-lookup](../pipelines/knowledge-lookup.md)).
 
 ## Analysis before mutation
 
-Applies to every role and every agent.
+- **Write only on a go-ahead:** an explicit confirmation (*write it, record it, make the change*), or
+  a request that was itself an edit command (*write, add, update, fix, implement*). Until then,
+  analysis produces words, not edits — backlog, design docs, ADRs, requirements and process docs
+  included.
+- A rule saying **where** something is recorded applies only **after** the decision to record it —
+  never a license to write during analysis.
 
-- **An analysis-only turn produces words, not edits.** When the owner asks you to **analyze,
-  explain, review, compare options, or identify what remains** — typical openers: *why, how,
-  what's left, what would you, which is better, take a look, assess* — report the findings and a
-  recommendation **in chat first**; do **not** edit files yet.
-- **Write only after a go-ahead.** Mutate backlog (`TASKS.md`), design docs, ADRs, requirements,
-  or akmon process docs only after explicit confirmation (*write it / record it / add it /
-  make the change*), or when the original request was itself an edit command (*write, add,
-  update, fix, implement*).
-- A rule saying **where** something is recorded applies only **after** the decision to record
-  it — never a license to write during analysis.
+These two rules, and the owner's consequential choices above, are read by audience: the session the
+owner attends asks the owner ([collaboration](../rules/collaboration.md)); a delegate or an autonomous
+run takes its brief as the go-ahead and reports a consequential choice instead of making it
+([unattended](../rules/unattended.md)).
 
 Runtime check: analysis.before-mutation — subset (the first planning/design doc edit of a session
 raises a reminder; whether the turn is analysis-only is not decidable by a hook); detail in [hooks/README.md](../hooks/README.md).
-
-## Role declaration
-
-- **State which role you are operating in before project work, and restate it on every switch.**
-  Format: `🧭 role: <name> — <focus>`; pick the role by operation ([roles/](../roles/README.md)).
-  `🧭 agent: <name> — <focus>` is still read as an alias for one release; write `role:`.
-
-Runtime check: role.declaration — subset (the first code-file edit of a session raises the design→code
-reminder; the switch itself is not observable, so the restatement is not checked); detail in [hooks/README.md](../hooks/README.md).
 
 ## Documentation hygiene
 

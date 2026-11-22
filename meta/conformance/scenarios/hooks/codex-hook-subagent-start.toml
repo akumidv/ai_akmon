@@ -1,0 +1,20 @@
+# The Codex subagent-start route: the same unattended layer, for a child (M250).
+id = "hooks/codex-hook-subagent-start"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook", "hook:subagent-start"]
+
+[run]
+script = "codex-hook"
+args = ["subagent-start"]
+
+[run.payload]
+session_id = "sess-ch-sa"
+agent_id = "agent-1"
+agent_type = "default"
+cwd = "{{root}}"
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"SubagentStart\", \"additionalContext\": \"# Rules: working without the owner\\n\\nCorpus stand-in for the unattended layer: what the session-start hook delivers to a session no owner attends, and what the subagent-start hook delivers to a delegate.\"}}\n"

@@ -106,11 +106,12 @@ import { codePointCompare, codePointSort } from "../common/sort.mjs";
  * @property {{no_record: string, ecosystem: string}} unsupported_found
  * @property {Record<string, Array<{matcher: string | null, commands: string[]}>>} claude_hooks
  * @property {Record<string, Array<{matcher: string | null, commands: Array<[string, string]>}>>} codex_hooks
- * @property {{claude_md: string, copilot_md: string, gemini_md: string, codex_readme: string}} vendor_pointers
+ * @property {{claude_md: string, copilot_md: string, gemini_md: string, qwen_md: string, codex_readme: string}} vendor_pointers
  * @property {Array<[string, string]>} planned_files
  * @property {{no_frontmatter: string, with_frontmatter: string}} skill_stubs
  * @property {string[]} skill_stub_dirs
  * @property {string[]} always_imported
+ * @property {string[]} hook_delivered
  * @property {{open: string, close: string}} imports_region
  * @property {Record<string, string>} moved_imports
  * @property {Array<{profile: string, languages: string[], manifests: string[]}>} language_profiles
@@ -628,6 +629,20 @@ function _copilotMd(/** @type {SyncData} */ data, /** @type {string} */ root) {
 /** The generated `GEMINI.md` body (`sync.json`). */
 function _geminiMd(/** @type {SyncData} */ data, /** @type {string} */ root) {
   return fill(data.sync.vendor_pointers.gemini_md, { banner: generatedBanner(data.materialization, root) });
+}
+
+/**
+ * The generated `QWEN.md` body (`sync.json`): Qwen Code's head carrier for the owner-dialogue rules.
+ *
+ * Qwen Code loads `QWEN.md` and `AGENTS.md` and expands `@`-imports (M253), but a consumer's project
+ * hooks do not run there (M255), so the hook that delivers the head layer elsewhere cannot. The pointer
+ * imports it under the project's own import prefix (A49, D-A49-QWEN-CARRIER).
+ */
+function _qwenMd(/** @type {SyncData} */ data, /** @type {string} */ root) {
+  return fill(data.sync.vendor_pointers.qwen_md, {
+    banner: generatedBanner(data.materialization, root),
+    import_prefix: importPrefix(root),
+  });
 }
 
 /** The generated Codex `README.md` body (`sync.json`). */
@@ -1415,6 +1430,18 @@ export function alwaysImported(data) {
 }
 
 /**
+ * The standard's rule files a hook delivers instead of an `@`-import (`sync.json`): the head layer and
+ * the unattended layer (`common/audience.json`). No consumer file imports them, so a project's context
+ * carries each only for the audience it is meant for. Package mode still materializes them, because the
+ * consumer's fallback section of `AGENTS.md` and its `QWEN.md` point at the materialized copy.
+ * @param {SyncData} data
+ * @returns {string[]}
+ */
+export function hookDelivered(data) {
+  return [...data.sync.hook_delivered];
+}
+
+/**
  * The directory the standard's files are imported from, `@` and trailing slash left out: the
  * materialized copy in package mode, the mount otherwise; empty when the project is the standard's
  * own tree ({@link isSelfHosted}, C207), whose files are imported in place.
@@ -1769,8 +1796,8 @@ export function importedStandardFiles(data, root) {
 
 /**
  * Package-mode materialization (ADR 0009 §4, narrowed by C77, widened to profiles by ADR 0014): the
- * guardrails and profiles the consumer's `AGENTS.md` imports, the ruff rules its ruff configuration
- * extends, and nothing else. Nothing executable is copied: the hooks and the `common` code they
+ * guardrails and profiles the consumer's `AGENTS.md` imports, the rule files a hook delivers
+ * ({@link hookDelivered}, A49), the ruff rules its ruff configuration extends, and nothing else. Nothing executable is copied: the hooks and the `common` code they
  * import sit in `node_modules/akmon`, and `node` runs them from there.
  *
  * The guardrails are the one exception. The import lives in `AGENTS.md`: a committed, hand-owned
@@ -1790,7 +1817,13 @@ export function materializedFiles(data, root) {
   }
   const source = standardTreeRoot(root);
   const dest = pyPath(aitnaRoot(root), ".akmon");
-  const files = names
+  const delivered = hookDelivered(data).filter((name) => !names.includes(name));
+  for (const name of delivered) {
+    if (!isFile(pyPath(source, name))) {
+      errors.push(`the standard does not ship a hook-delivered file: ${name}`);
+    }
+  }
+  const files = [...names, ...delivered]
     .filter((name) => isFile(pyPath(source, name)))
     .map(
       (name) =>
@@ -1910,6 +1943,7 @@ export function plannedFiles(data, root) {
     claude_md: _claudeMd,
     copilot_md: _copilotMd,
     gemini_md: _geminiMd,
+    qwen_md: _qwenMd,
     codex_readme: _codexReadme,
     codex_hooks_text: codexHooksText,
   };

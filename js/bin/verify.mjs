@@ -85,7 +85,7 @@ import {
 } from "./sync.mjs";
 import * as alwaysLoaded from "../common/always_loaded.mjs";
 import { lazyHookData } from "../hooks/hook_data.mjs";
-import { sessionStartMembers } from "../hooks/session_start_text.mjs";
+import { sessionStartMembers, subagentStartMembers } from "../hooks/session_start_text.mjs";
 import {
   checkTableOk,
   configTarget,
@@ -1248,7 +1248,8 @@ export class Verifier {
   }
 
   /**
-   * ADR 0012 F18, consumer-total scope: warn over the cap, report the measurement every run. The
+   * ADR 0012 F18, consumer-total scope: warn over the cap, report the measurement every run, with the
+   * unattended head and a delegate beside the attended head the cap is checked against. The
    * consumer owns most of this population, so the finding stays `warn`; `--strict` turns it into a
    * non-zero exit through the shared exit policy, not by changing severity.
    * @param {string} agentsText
@@ -1268,7 +1269,11 @@ export class Verifier {
     const scope = alwaysLoaded.consumer(data);
     const population = found[scope];
     const cap = alwaysLoaded.caps(data)[scope];
-    const message = alwaysLoaded.report(population, cap);
+    const others = new alwaysLoaded.OtherAudiences(
+      sessionStartMembers(this.hookData, this.root, false),
+      subagentStartMembers(this.hookData, this.root),
+    );
+    const message = alwaysLoaded.report(population, cap, others);
     if (alwaysLoaded.over(population, cap)) {
       this.warn("caps.always-loaded", message, {
         target: "AGENTS.md",

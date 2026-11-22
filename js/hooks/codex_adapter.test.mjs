@@ -10,7 +10,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,6 +29,7 @@ import {
   writeStderr,
 } from "./codex_adapter.mjs";
 import { lazyHookData } from "./hook_data.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 
 const data = lazyHookData();
 const ADAPTER = new URL("./codex_adapter.mjs", import.meta.url).href;
@@ -42,14 +42,10 @@ function heredoc(/** @type {string} */ invocation, body = PATCH, delimiter = "<<
   return `${invocation} ${delimiter}\n${body}EOF\n`;
 }
 
-/** Run `body` with a fresh directory, removed after. */
+/** Run `body` with a fresh directory (`tempDir` removes it when the process exits). */
 function withDir(/** @type {(dir: string) => void} */ body) {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-codex-adapter-test-"));
-  try {
-    body(dir);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-codex-adapter-test-");
+  body(dir);
 }
 
 /**

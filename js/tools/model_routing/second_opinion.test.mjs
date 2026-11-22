@@ -7,10 +7,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
+import { tempDir } from "../../common/temp_dir.test.mjs";
 import { digest, main, readJsonObject, reportPrefix, reviewPrompt, unavailableNotice } from "./second_opinion.mjs";
 
 /**
@@ -61,7 +61,7 @@ const CODEX_IDS = { luna: "gpt-6-luna", terra: "gpt-6.1-terra", sol: "gpt-6.1-so
  * @returns {string}
  */
 function project(resolved = true) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "second-opinion-test-"));
+  const root = tempDir("second-opinion-test-");
   fs.writeFileSync(path.join(root, "AGENTS.md"), "x\n");
   fs.writeFileSync(path.join(root, "pack.md"), "material\n");
   if (resolved) {
@@ -96,7 +96,7 @@ test("unavailableNotice states the gate, the rank and the reason, then the three
 });
 
 test("readJsonObject is {} for absent, broken or non-object files", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "second-opinion-json-"));
+  const dir = tempDir("second-opinion-json-");
   fs.writeFileSync(path.join(dir, "ok.json"), '{"a": 1}');
   fs.writeFileSync(path.join(dir, "bad.json"), "{");
   fs.writeFileSync(path.join(dir, "list.json"), "[1]");
@@ -115,7 +115,7 @@ const SESSION = ["--session-provider", "claude", "--session-model", "opus"];
  * @returns {string}
  */
 function bin(scripts) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "second-opinion-bin-"));
+  const dir = tempDir("second-opinion-bin-");
   for (const [name, script] of Object.entries(scripts)) {
     fs.writeFileSync(path.join(dir, name), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
   }
@@ -548,7 +548,7 @@ test("main: an undecodable provider byte reads as U+FFFD and the report is still
  * @returns {{base: string, root: string, dir: string, configured: string, outside: string}}
  */
 function projectWithReportDir(place) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), "second-opinion-dir-"));
+  const base = tempDir("second-opinion-dir-");
   const root = path.join(base, "project");
   fs.mkdirSync(root);
   fs.writeFileSync(path.join(root, "AGENTS.md"), "x\n");
@@ -575,18 +575,14 @@ for (const [kind, place] of Object.entries(OUTSIDE)) {
   for (const dryRun of [false, true]) {
     test(`main: a report_dir outside the project (${kind}${dryRun ? ", --dry-run" : ""}) is refused before anything runs (C9)`, () => {
       const { base, root, dir, configured, outside } = projectWithReportDir(place);
-      try {
-        const result = withPath(dir, () => run(args(root, ...SESSION, ...(dryRun ? ["--dry-run"] : []))));
-        assert.deepEqual(result, {
-          code: 2,
-          stdout: "",
-          stderr: `second-opinion: report_dir '${configured}' resolves outside the project; it must be a directory inside the project root.\n`,
-        });
-        assert.equal(fs.existsSync(path.join(outside, "reviews")), false);
-        assert.equal(fs.existsSync(path.join(base, "provider-ran")), false);
-      } finally {
-        fs.rmSync(base, { recursive: true, force: true });
-      }
+      const result = withPath(dir, () => run(args(root, ...SESSION, ...(dryRun ? ["--dry-run"] : []))));
+      assert.deepEqual(result, {
+        code: 2,
+        stdout: "",
+        stderr: `second-opinion: report_dir '${configured}' resolves outside the project; it must be a directory inside the project root.\n`,
+      });
+      assert.equal(fs.existsSync(path.join(outside, "reviews")), false);
+      assert.equal(fs.existsSync(path.join(base, "provider-ran")), false);
     });
   }
 }
@@ -597,15 +593,11 @@ test("main: a report_dir that stays inside the project through `..` and a link s
     fs.symlinkSync(path.join(root, "docs"), path.join(root, "link"));
     return { configured: "link/../link/reviews", outside: "" };
   });
-  try {
-    const result = withPath(dir, () => run(args(root, ...SESSION)));
-    assert.equal(result.code, 0);
-    assert.match(result.stdout, /\nreport: docs\/reviews\/g-1\.md\n/);
-    assert.ok(fs.readFileSync(path.join(root, "docs", "reviews", "g-1.md"), "utf8").endsWith("\n\nverdict: fine\n"));
-    assert.equal(fs.existsSync(path.join(base, "provider-ran")), true);
-  } finally {
-    fs.rmSync(base, { recursive: true, force: true });
-  }
+  const result = withPath(dir, () => run(args(root, ...SESSION)));
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /\nreport: docs\/reviews\/g-1\.md\n/);
+  assert.ok(fs.readFileSync(path.join(root, "docs", "reviews", "g-1.md"), "utf8").endsWith("\n\nverdict: fine\n"));
+  assert.equal(fs.existsSync(path.join(base, "provider-ran")), true);
 });
 
 /** A carrier that says whether its stdin is at EOF (a closed or null device) or still open after two seconds. */
@@ -619,7 +611,7 @@ const STDIN_PROBE =
  * @returns {Promise<{code: number | null, stdout: string}>}
  */
 function runWithOpenStdin(argv) {
-  const driver = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "second-opinion-driver-")), "driver.mjs");
+  const driver = path.join(tempDir("second-opinion-driver-"), "driver.mjs");
   const module = new URL("./second_opinion.mjs", import.meta.url).href;
   fs.writeFileSync(
     driver,

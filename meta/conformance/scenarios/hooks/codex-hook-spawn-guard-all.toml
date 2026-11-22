@@ -1,0 +1,20 @@
+# A spawn that forks the whole history (`fork_turns = "all"`) is rewritten to `none` through updatedInput with an allow decision; every other received field, the opaque message included, is carried over (A49, M257).
+id = "hooks/codex-hook-spawn-guard-all"
+ecosystem = "shared"
+kind = "hook"
+covers = ["hook:codex-hook"]
+
+[run]
+script = "codex-hook"
+args = ["spawn-guard"]
+
+[run.payload]
+tool_name = "collaborationspawn_agent"
+session_id = "sess-sg-all"
+cwd = "{{root}}"
+tool_input = { task_name = "explore", fork_turns = "all", message = "find it \u2014 \u00abn\u00e4\u00bb", extra = { list = [1, 2.5, true], nothing = "x" } }
+
+[expected]
+exit = 0
+stderr = ""
+stdout = "{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\", \"updatedInput\": {\"task_name\": \"explore\", \"fork_turns\": \"none\", \"message\": \"find it \\u2014 \\u00abn\\u00e4\\u00bb\", \"extra\": {\"list\": [1, 2.5, true], \"nothing\": \"x\"}}}}\n"

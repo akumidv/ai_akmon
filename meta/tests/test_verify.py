@@ -93,6 +93,7 @@ def _make_project(tmp_path: Path) -> Path:
         "guardrails/_common.md",
         "rules/collaboration.md",
         "rules/templates.md",
+        "rules/unattended.md",
         "rules/code.md",
         "pipelines/pre-commit.md",
         "pipelines/code-flow.md",
@@ -1736,10 +1737,10 @@ def _unusable_wiring(root: Path, kind: str) -> str:
     }[kind]
 
 
-def test_the_generated_population_is_five_command_entries(tmp_path):
+def test_the_generated_population_is_seven_command_entries(tmp_path):
     """The carriers below derive their fixture from the real generator; pin its size so a
     shrinking population cannot quietly thin the corpus."""
-    assert len(_generated_entries(tmp_path)) == 5
+    assert len(_generated_entries(tmp_path)) == 7
 
 
 def test_check_codex_host_trust_is_silent_without_generated_wiring(tmp_path, monkeypatch):
@@ -1832,10 +1833,10 @@ def test_check_codex_host_trust_zero_discovered_entries_is_every_one_missing(tmp
     verifier = _live_query_verifier(tmp_path, monkeypatch, _hooks_list_runner([]))
     verifier.check_codex_host_trust()
     assert _levels(verifier.findings) == {"warn"}
-    assert _only_host_trust_message(verifier) == "Codex hook delivery is incomplete: missing (5)"
+    assert _only_host_trust_message(verifier) == "Codex hook delivery is incomplete: missing (7)"
 
 
-@pytest.mark.parametrize("index", range(5))
+@pytest.mark.parametrize("index", range(7))
 def test_check_codex_host_trust_warns_when_any_one_generated_entry_is_missing(tmp_path, monkeypatch, index):
     _write_codex_wiring(tmp_path)
     entries = _generated_entries(tmp_path)
@@ -2729,7 +2730,7 @@ def test_verify_data_pins_its_structure():
     }
     assert _VERIFY_DATA["wired_hook_scripts"][0] == "hook_core.py"
     assert _VERIFY_DATA["wired_hook_scripts"][-1] == "work-style.py"
-    assert len(_VERIFY_DATA["wired_hook_scripts"]) == 15
+    assert len(_VERIFY_DATA["wired_hook_scripts"]) == 16
     assert _VERIFY_DATA["task_statuses"] == ["active", "blocked", "deferred", "done"]
     assert _VERIFY_DATA["tasks_max_lines"] == 200
     assert _VERIFY_DATA["skill_name_max"] == 64

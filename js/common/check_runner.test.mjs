@@ -8,7 +8,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,6 +23,7 @@ import {
   readChecks,
   runChecks,
 } from "./check_runner.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 const data = JSON.parse(fs.readFileSync(new URL("../../common/check_runner.json", import.meta.url), "utf-8"));
 
@@ -87,7 +87,7 @@ test("argv_for expands the placeholder: the whole project, or only the matching 
 });
 
 function gitRepo() {
-  const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-check-runner-"));
+  const root = tempDir("akmon-check-runner-");
   const git = (/** @type {string[]} */ ...args) => execFileSync("git", ["-C", root, ...args], { stdio: "ignore" });
   git("init", "-b", "main");
   git("config", "user.name", "Test");
@@ -106,7 +106,6 @@ test("changed_files lists the diff against HEAD plus the new files, never the de
   fs.writeFileSync(posix.join(root, "_aitna", "note.md"), "dev layer\n");
   fs.writeFileSync(posix.join(root, "b.txt"), "not python\n");
   assert.deepEqual(changedFiles(data, root), ["a.py", "b.py", "b.txt"]);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("changed_files keeps regular files only: a link to a directory is not one (C115)", () => {
@@ -117,7 +116,6 @@ test("changed_files keeps regular files only: a link to a directory is not one (
   fs.symlinkSync("missing", posix.join(root, "dangling.py"));
   fs.writeFileSync(posix.join(root, "c.py"), "z = 1\n");
   assert.deepEqual(changedFiles(data, root), ["c.py"]);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("changed_files drops the real directories git names: a replaced tracked file, a nested repository (C120)", () => {
@@ -131,7 +129,6 @@ test("changed_files drops the real directories git names: a replaced tracked fil
   execFileSync("git", ["-C", posix.join(root, "nested"), "init"], { stdio: "ignore" });
   fs.writeFileSync(posix.join(root, "nested", "n.py"), "z = 1\n");
   assert.deepEqual(changedFiles(data, root), ["a.py/inner.py"]);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a git that cannot list the changes is a ScopeError naming the command and its status", () => {
@@ -221,7 +218,7 @@ test("the check's own output reaches the terminal instead of being swallowed", (
   // The runner's contract is that the command reports and the finding only summarises, so the
   // output must pass the process through. A child process is the only place that can be observed:
   // written here, it would land in the test reporter's own stream.
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-check-io-"));
+  const dir = tempDir("akmon-check-io-");
   const driver = posix.join(dir, "driver.mjs");
   fs.writeFileSync(
     driver,
@@ -234,7 +231,6 @@ test("the check's own output reaches the terminal instead of being swallowed", (
   const result = spawnSync(process.execPath, [driver], { encoding: "utf-8" });
   assert.equal(result.stdout, "the-linter-spoke\n", "the command's stdout did not reach the terminal");
   assert.equal(result.stderr, "`echo the-linter-spoke` passed\n");
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test("a date in the [check] table is a bad entry, not an empty spec", () => {

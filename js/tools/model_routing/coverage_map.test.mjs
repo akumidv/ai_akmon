@@ -7,9 +7,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
+import { tempDir } from "../../common/temp_dir.test.mjs";
 import {
   buildCoverageMap,
   describeScope,
@@ -55,7 +55,7 @@ function run(argv) {
  * @returns {string}
  */
 function project(files) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "coverage-map-test-"));
+  const root = tempDir("coverage-map-test-");
   fs.writeFileSync(path.join(root, "AGENTS.md"), "x");
   for (const [rel, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -200,7 +200,7 @@ test("the default map lands under the dev root the project declares", () => {
 });
 
 test("with no project root and no --out it prints the notice, exits 2 and writes nothing", () => {
-  const lone = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "coverage-map-lone-")));
+  const lone = tempDir("coverage-map-lone-");
   fs.mkdirSync(path.join(lone, ".claude"));
   fs.writeFileSync(
     path.join(lone, ".claude", "model-routing.log"),
@@ -221,7 +221,6 @@ test("with no project root and no --out it prints the notice, exits 2 and writes
     assert.deepEqual(fs.readdirSync(lone).sort(), [".claude", "m.md"]);
   } finally {
     process.chdir(saved);
-    fs.rmSync(lone, { recursive: true, force: true });
   }
 });
 

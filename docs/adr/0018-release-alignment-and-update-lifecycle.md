@@ -35,6 +35,10 @@ the contract while retaining their carrier-specific mechanics.
 > Everything else in `AGENTS.md`, profile imports included, stays hand-owned and is only checked. The
 > reason: a new rule file or a moved path otherwise needs a hand edit in every consumer, and an
 > unresolved `@`-import fails silently. The cost: a hand edit inside the region is overwritten.
+>
+> **Amended by [0033/D04](0033-starting-context-by-audience.md#d04--hook-delivered-rule-files-are-materialized-not-imported):**
+> the region now carries the floor's files only; the owner-dialogue and unattended rule files are
+> delivered by hooks and materialized, not imported.
 
 ### D03 — Explicit update and rollback
 

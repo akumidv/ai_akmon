@@ -7,9 +7,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
+import { tempDir } from "../../common/temp_dir.test.mjs";
 import { embeddedTreeRoot } from "../../akmon/_tree.mjs";
 import { read } from "../../common/jsondata.mjs";
 import {
@@ -72,7 +72,7 @@ async function run(argv, deps) {
 
 /** @returns {string} a scratch directory */
 function scratch() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "stats-test-"));
+  return tempDir("stats-test-");
 }
 
 const assistantLine = (/** @type {string} */ model, /** @type {object} */ usage) =>

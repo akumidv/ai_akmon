@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { fill } from "../common/jsondata.mjs";
 import { readSyncData } from "../bin/sync.mjs";
 import { validatedDevRootName } from "../common/project_root.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 import { switchTag } from "../common/versions.mjs";
 import {
   ciInstall,
@@ -57,7 +58,7 @@ const data = readInitData();
  * @returns {string}
  */
 function project(files = {}, { linked = false } = {}) {
-  const root = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-init-")));
+  const root = tempDir("akmon-init-");
   for (const [relative, text] of Object.entries(files)) {
     fs.mkdirSync(posix.dirname(posix.join(root, relative)), { recursive: true });
     fs.writeFileSync(posix.join(root, relative), text);
@@ -1341,10 +1342,7 @@ test("the detected profiles follow the flags and the manifests, python first, no
  * @param {string} base
  */
 function region(base) {
-  return (
-    `<!-- akmon:imports -->\n@${base}/guardrails/_common.md\n@${base}/rules/collaboration.md\n` +
-    `@${base}/rules/templates.md\n@${base}/rules/code.md\n<!-- /akmon:imports -->\n`
-  );
+  return `<!-- akmon:imports -->\n@${base}/guardrails/_common.md\n@${base}/rules/code.md\n<!-- /akmon:imports -->\n`;
 }
 
 test("a fresh block imports js.md after the imports region and keeps no classify step once classified", async () => {
@@ -1418,7 +1416,7 @@ function git(args, cwd) {
  * @returns {string}
  */
 function standardRepo(tags, edit = () => {}) {
-  const repo = fs.realpathSync(fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-standard-")));
+  const repo = tempDir("akmon-standard-");
   for (const name of [...data.tree_members, ...data.tree_members_node]) {
     if (fs.existsSync(posix.join(TREE, name))) {
       fs.cpSync(posix.join(TREE, name), posix.join(repo, name), {

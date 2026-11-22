@@ -1,0 +1,5 @@
+{
+  "attended_files": ["rules/collaboration.md", "rules/templates.md"],
+  "unattended_files": ["rules/unattended.md"],
+  "separator": "\n\n"
+}

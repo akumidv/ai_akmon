@@ -7,10 +7,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import { LearningState, parseUtc, readState, writeState } from "../common/learning.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 import { transcriptsDir } from "../common/transcripts.mjs";
 import { main } from "./_learn.mjs";
 
@@ -21,7 +21,7 @@ const NOW = "2026-10-28T12:00:00Z";
  * @param {{record?: string, now?: string}} [options]
  */
 function terminal({ record = "", now = NOW } = {}) {
-  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "akmon-learn-")));
+  const base = tempDir("akmon-learn-");
   const root = path.join(base, "proj");
   fs.mkdirSync(path.join(root, "_aitna"), { recursive: true });
   fs.writeFileSync(path.join(root, "AGENTS.md"), "# a\n");

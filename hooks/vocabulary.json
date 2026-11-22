@@ -34,6 +34,7 @@
     "additional_context": "additionalContext",
     "permission_decision": "permissionDecision",
     "permission_reason": "permissionDecisionReason",
+    "updated_input": "updatedInput",
     "hook_specific_output": "hookSpecificOutput",
     "decision": "decision",
     "reason": "reason",

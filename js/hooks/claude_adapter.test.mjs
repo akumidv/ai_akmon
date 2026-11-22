@@ -8,7 +8,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -24,18 +23,15 @@ import {
 } from "./claude_adapter.mjs";
 import { GUARD_CRASH_FALLBACK_REASON, HookResult, guardCrashDenyDocument, hookFailureNotice } from "./hook_core.mjs";
 import { TREE_ROOT, lazyHookData } from "./hook_data.mjs";
+import { tempDir } from "../common/temp_dir.test.mjs";
 
 const data = lazyHookData();
 const HOOKS = posix.dirname(fileURLToPath(import.meta.url));
 
-/** Run `body` with a fresh directory, removed after. */
+/** Run `body` with a fresh directory (`tempDir` removes it when the process exits). */
 function withDir(/** @type {(dir: string) => void} */ body) {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-claude-adapter-test-"));
-  try {
-    body(dir);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-claude-adapter-test-");
+  body(dir);
 }
 
 /** `body`'s thrown error, for a test that pins its class. */
@@ -521,19 +517,15 @@ test("session-start-agent runs as a process: the roster from the payload's cwd, 
  * @param {(root: string) => void} body
  */
 function withBrokenMatrixTree(body) {
-  const root = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-broken-matrix-"));
-  try {
-    for (const directory of ["js", "hooks", "common", "tools/model_routing", "agents"]) {
-      fs.cpSync(posix.join(TREE_ROOT, directory), posix.join(root, directory), {
-        recursive: true,
-        filter: (source) => !source.includes("__pycache__") && !source.endsWith(".test.mjs"),
-      });
-    }
-    fs.writeFileSync(posix.join(root, "common", "access_matrix.json"), "{ not json");
-    body(root);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+  const root = tempDir("akmon-broken-matrix-");
+  for (const directory of ["js", "hooks", "common", "tools/model_routing", "agents"]) {
+    fs.cpSync(posix.join(TREE_ROOT, directory), posix.join(root, directory), {
+      recursive: true,
+      filter: (source) => !source.includes("__pycache__") && !source.endsWith(".test.mjs"),
+    });
   }
+  fs.writeFileSync(posix.join(root, "common", "access_matrix.json"), "{ not json");
+  body(root);
 }
 
 // --- D-C203-GUARD-CRASH: an autonomous run's commit guard fails closed, a developer's stays crash-open --------------

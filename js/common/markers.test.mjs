@@ -8,7 +8,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import { posix } from "node:path";
 
 import {
@@ -21,17 +20,14 @@ import {
   releaseDiagnosticMarkers,
   unidentifiedIdentity,
 } from "./markers.mjs";
+import { tempDir } from "./temp_dir.test.mjs";
 
 const data = JSON.parse(fs.readFileSync(new URL("../../common/markers.json", import.meta.url), "utf-8"));
 
 /** Run `body` with a fresh directory, removed after. */
 function withDir(/** @type {(dir: string) => void} */ body) {
-  const dir = fs.mkdtempSync(posix.join(os.tmpdir(), "akmon-markers-test-"));
-  try {
-    body(dir);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = tempDir("akmon-markers-test-");
+  body(dir);
 }
 
 /** Run `body` with the three tempdir variables set as given (`null`: unset), then restored. */
